@@ -6,6 +6,7 @@
 
 import { effectiveAtoms, findUser, SHELL_USERS, type User } from "./lib/rbac.ts";
 import { SAMPLE_AP, SAMPLE_APPLICATIONS, SAMPLE_TAX, SAMPLE_THREADS, TODAY_STATS, TRUCKS_INBOUND } from "./lib/sample-data.ts";
+import { classifyByRules, draftReply, type InboundContext } from "./lib/drafter.ts";
 
 const PORT = parseInt(Deno.env.get("PORT") || "8001");
 const WEB_DIR = new URL("../../web/", import.meta.url).pathname;
@@ -174,6 +175,69 @@ Deno.serve({ port: PORT }, async (req: Request) => {
       ];
     }
     return json(out);
+  }
+
+  // POST /api/draft-reply — Drafter agent: takes a thread + product context,
+  // returns a draft reply for human review. Requires messages.send.* permission.
+  if (path === "/api/draft-reply" && req.method === "POST") {
+    if (!atoms.has("messages.send.assigned-accounts") && !atoms.has("messages.send.any-account")) {
+      return json({ error: "forbidden", missing_atom: "messages.send.assigned-accounts" }, 403);
+    }
+    let body: { thread_id?: string; latest_message?: string; product_match?: any; in_stock?: any };
+    try { body = await req.json(); } catch { return json({ error: "invalid_json" }, 400); }
+    if (!body.latest_message) return json({ error: "latest_message_required" }, 400);
+
+    // If thread_id supplied, hydrate context from sample data.
+    let thread = body.thread_id ? SAMPLE_THREADS.find((t) => t.id === body.thread_id) : undefined;
+
+    // Look up product if we have a thread that matched one
+    let productMatch = body.product_match;
+    if (!productMatch && thread?.product_slug) {
+      try {
+        const catalogText = await Deno.readFile(new URL("../../data/catalog.json", import.meta.url));
+        const catalog = JSON.parse(new TextDecoder().decode(catalogText));
+        const p = (catalog.products || []).find((x: any) => x.slug === thread.product_slug);
+        if (p) {
+          productMatch = {
+            slug: p.slug,
+            name: p.name,
+            price: p.price,
+            price_text: p.price_text,
+            sku: p.sku,
+            photos: (p.photos || []).slice(0, 3),
+            color_options: p.color_options || [],
+          };
+        }
+      } catch { /* swallow — Drafter will work without product context */ }
+    }
+
+    const ctx: InboundContext = {
+      customer_name: thread?.customer_name || "the customer",
+      customer_handle: thread?.customer_handle,
+      surface: thread?.surface || "mp",
+      account_label: thread?.account_label || "Unknown account",
+      thread_history: thread ? [{ from: thread.last_message_from, text: thread.preview, at: thread.last_message_at }] : [],
+      latest_message: body.latest_message,
+      product_match: productMatch,
+      in_stock: body.in_stock,
+      worker_name: user.name,
+      store_open_until: "7pm",
+    };
+
+    try {
+      const draft = await draftReply(ctx);
+      return json(draft);
+    } catch (err) {
+      return json({ error: "drafter_failed", detail: String(err) }, 502);
+    }
+  }
+
+  // GET /api/draft-reply/classify?text=... — fast rule-based intent classification only
+  if (path === "/api/draft-reply/classify" && req.method === "GET") {
+    const url = new URL(req.url);
+    const text = url.searchParams.get("text") || "";
+    if (!text) return json({ error: "text_required" }, 400);
+    return json(classifyByRules(text));
   }
 
   if (path === "/api/catalog" && req.method === "GET") {
