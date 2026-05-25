@@ -387,7 +387,7 @@ async function loadMessages() {
     else note.textContent = 'only your threads';
     $('threads-list').innerHTML = data.threads.length === 0 ? '<div class="empty">No threads.</div>' :
       data.threads.map(t => `
-        <div class="thread">
+        <div class="thread" data-thread-id="${escapeHtml(t.id)}">
           <div class="thread-line1">
             ${t.unread ? '<span class="unread-dot"></span>' : ''}
             <span class="thread-customer">${escapeHtml(t.customer_name)}</span>
@@ -399,11 +399,65 @@ async function loadMessages() {
             <span>${escapeHtml(t.account_label)}</span>
             <span>${escapeHtml(timeAgo(t.last_message_at))} ago</span>
             ${t.product_slug ? `<span>→ ${escapeHtml(t.product_slug)}</span>` : ''}
+            <span style="flex:1;"></span>
+            ${hasAtom('messages.send.assigned-accounts') || hasAtom('messages.send.any-account')
+              ? `<button class="draft-btn" data-thread-id="${escapeHtml(t.id)}" data-msg="${escapeHtml(t.preview)}" style="padding:6px 12px;background:var(--primary);color:white;border:0;border-radius:5px;font-size:11px;font-family:inherit;cursor:pointer;font-weight:600;">Draft reply</button>`
+              : ''}
           </div>
+          <div class="draft-output" id="draft-${escapeHtml(t.id)}" style="display:none;margin-top:10px;padding:12px;background:var(--surface-soft);border-radius:6px;border-left:3px solid var(--primary);"></div>
         </div>
       `).join('');
+    // Wire draft-reply buttons
+    document.querySelectorAll('.draft-btn').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        draftForThread(btn.dataset.threadId, btn.dataset.msg, btn);
+      });
+    });
   } catch (err) {
     $('threads-list').innerHTML = `<div class="locked">${escapeHtml(err.message)}: needs <code>${escapeHtml(err.body?.missing_atom || 'messages.read.own')}</code> permission</div>`;
+  }
+}
+
+async function draftForThread(threadId, latestMessage, btn) {
+  const output = $(`draft-${threadId}`);
+  output.style.display = 'block';
+  output.innerHTML = '<div style="color:var(--dim);font-size:12px;">Drafting…</div>';
+  btn.disabled = true;
+  const origText = btn.textContent;
+  btn.textContent = '…';
+  try {
+    const res = await fetch(`${API}/api/draft-reply`, {
+      method: 'POST',
+      headers: { 'X-Access-Code': getCode(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ thread_id: threadId, latest_message: latestMessage }),
+    });
+    if (!res.ok) {
+      const errBody = await res.json().catch(() => ({}));
+      throw new Error(errBody.detail || errBody.error || `HTTP ${res.status}`);
+    }
+    const draft = await res.json();
+    const conf = Math.round((draft.intent_confidence || 0) * 100);
+    output.innerHTML = `
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;font-size:11px;color:var(--dim);font-family:var(--mono);">
+        <span class="badge primary">${escapeHtml(draft.intent)}</span>
+        <span>${conf}% confidence</span>
+        ${draft.volunteered_financing ? '<span class="badge success">financing offered</span>' : ''}
+        ${draft.cta_to_visit ? '<span class="badge success">visit CTA</span>' : '<span class="badge warning">no CTA</span>'}
+      </div>
+      <div style="font-size:14px;line-height:1.5;color:var(--text);white-space:pre-wrap;padding:10px;background:white;border:1px solid var(--border);border-radius:5px;margin-bottom:8px;">${escapeHtml(draft.draft_reply)}</div>
+      <div style="font-size:11px;color:var(--dim);font-style:italic;margin-bottom:6px;">Why: ${escapeHtml(draft.reasoning)}</div>
+      ${draft.notes_for_human && draft.notes_for_human.length > 0 ? `
+        <div style="font-size:11px;color:var(--warning);margin-bottom:6px;">
+          <strong>Before sending:</strong> ${draft.notes_for_human.map(n => escapeHtml(n)).join(' · ')}
+        </div>` : ''}
+      <button onclick="navigator.clipboard.writeText(${JSON.stringify(draft.draft_reply)});this.textContent='✓ copied'" style="padding:5px 11px;background:var(--text);color:white;border:0;border-radius:4px;font-size:11px;font-family:inherit;cursor:pointer;">Copy draft</button>
+    `;
+  } catch (err) {
+    output.innerHTML = `<div style="color:var(--danger);font-size:12px;">Drafter error: ${escapeHtml(err.message)}</div>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = origText;
   }
 }
 
