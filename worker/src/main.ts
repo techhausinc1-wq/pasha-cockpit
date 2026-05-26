@@ -177,6 +177,44 @@ Deno.serve({ port: PORT }, async (req: Request) => {
     return json(out);
   }
 
+  // Derived "right now" aggregates — counts pulled from live sample state
+  if (path === "/api/dashboard/summary" && req.method === "GET") {
+    const visibleThreads = atoms.has("messages.read.all")
+      ? SAMPLE_THREADS
+      : atoms.has("messages.read.team")
+      ? SAMPLE_THREADS.filter((t) => (user.assigned_accounts || []).includes(t.account_id) || t.worker_id === user.id)
+      : SAMPLE_THREADS.filter((t) => t.worker_id === user.id);
+
+    const now = Date.now();
+    const unreadCount = visibleThreads.filter((t) => t.unread).length;
+    const waitingOver30Min = visibleThreads.filter((t) =>
+      t.unread && (now - new Date(t.last_message_at).getTime()) > 30 * 60 * 1000
+    ).length;
+
+    const visibleApps = atoms.has("financing.read.all-applications")
+      ? SAMPLE_APPLICATIONS
+      : SAMPLE_APPLICATIONS.filter((a) => a.worker_id === user.id);
+
+    const appsInProgress = visibleApps.filter((a) => a.status === "in-progress");
+    const appsInProgressLabels = appsInProgress.map((a) => {
+      const lastAttempt = a.lender_attempts[a.lender_attempts.length - 1];
+      return `${a.customer_name.split(" ")[0]} @ ${lastAttempt?.lender || "—"}`;
+    });
+
+    return json({
+      threads: {
+        total_visible: visibleThreads.length,
+        unread: unreadCount,
+        waiting_over_30min: waitingOver30Min,
+      },
+      financing: {
+        in_progress_count: appsInProgress.length,
+        in_progress_labels: appsInProgressLabels,
+      },
+      trucks: TRUCKS_INBOUND,
+    });
+  }
+
   // POST /api/draft-reply — Drafter agent: takes a thread + product context,
   // returns a draft reply for human review. Requires messages.send.* permission.
   if (path === "/api/draft-reply" && req.method === "POST") {

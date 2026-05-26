@@ -129,6 +129,25 @@ h2 { margin: 0 0 12px; font-size: 13px; font-weight: 600; color: var(--dim); tex
 /* Empty states */
 .empty { padding: 30px 14px; color: var(--dim); font-size: 13px; text-align: center; }
 
+/* Account groups (Messages view) */
+.account-group { margin-bottom: 22px; }
+.account-group:last-child { margin-bottom: 0; }
+.account-group-head {
+  display: flex; justify-content: space-between; align-items: baseline;
+  padding: 8px 0 6px;
+  border-bottom: 2px solid var(--border);
+  margin-bottom: 4px;
+}
+.account-group-label {
+  font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--text); font-weight: 600;
+}
+.account-group-meta {
+  display: flex; gap: 6px; align-items: baseline;
+  font-size: 11px; color: var(--dim);
+}
+.account-group-body { padding-left: 6px; }
+
 @media (max-width: 760px) {
   header { padding: 10px 12px; flex-wrap: wrap; }
   header nav { margin-left: 0; }
@@ -306,14 +325,22 @@ async function loadMe() {
 // ============= Dashboard =============
 async function loadDashboard() {
   try {
-    const data = await api('/api/dashboard/today');
+    const [data, summary] = await Promise.all([
+      api('/api/dashboard/today'),
+      api('/api/dashboard/summary'),
+    ]);
 
-    // Right now (always shown)
-    $('rightnow-list').innerHTML = `
-      <div class="row"><span class="label">7 messages waiting</span><span class="meta">3 over 30 min</span></div>
-      <div class="row"><span class="label">2 financing apps in progress</span><span class="meta">Cesar @ AFF · Adriana @ Koalafi</span></div>
-      ${data.trucks.map(t => `<div class="row"><span class="label">Truck — ${escapeHtml(t.supplier)}</span><span class="meta">${escapeHtml(t.arrives)} · ${t.pieces} pcs</span></div>`).join('')}
-    `;
+    // Right now — derived from live sample state
+    const t = summary.threads;
+    const f = summary.financing;
+    const threadLine = t.unread === 0
+      ? `<div class="row"><span class="label">Inbox clear</span><span class="badge success">caught up</span></div>`
+      : `<div class="row"><span class="label">${t.unread} ${t.unread === 1 ? 'message' : 'messages'} waiting</span><span class="meta">${t.waiting_over_30min > 0 ? `<span class="badge danger">${t.waiting_over_30min} over 30 min</span>` : 'all under 30 min'}</span></div>`;
+    const finLine = f.in_progress_count === 0
+      ? `<div class="row"><span class="label">No financing apps active</span><span class="meta">—</span></div>`
+      : `<div class="row"><span class="label">${f.in_progress_count} financing app${f.in_progress_count === 1 ? '' : 's'} in progress</span><span class="meta">${f.in_progress_labels.join(' · ')}</span></div>`;
+    $('rightnow-list').innerHTML = threadLine + finLine +
+      summary.trucks.map(tr => `<div class="row"><span class="label">Truck — ${escapeHtml(tr.supplier)}</span><span class="meta">${escapeHtml(tr.arrives)} · ${tr.pieces} pcs</span></div>`).join('');
 
     // Today stats
     $('today-stats').innerHTML = data.stats.map(s => `
@@ -385,28 +412,54 @@ async function loadMessages() {
     if (CURRENT_ATOMS.has('messages.read.all')) note.textContent = 'all threads (master view)';
     else if (CURRENT_ATOMS.has('messages.read.team')) note.textContent = 'team threads (your assigned accounts)';
     else note.textContent = 'only your threads';
-    $('threads-list').innerHTML = data.threads.length === 0 ? '<div class="empty">No threads.</div>' :
-      data.threads.map(t => `
-        <div class="thread" data-thread-id="${escapeHtml(t.id)}">
-          <div class="thread-line1">
-            ${t.unread ? '<span class="unread-dot"></span>' : ''}
-            <span class="thread-customer">${escapeHtml(t.customer_name)}</span>
-            <span class="thread-handle">${escapeHtml(t.customer_handle)}</span>
-            <span class="badge primary">${escapeHtml(t.intent)}</span>
-          </div>
-          <div class="thread-line2">${escapeHtml(t.preview)}</div>
-          <div class="thread-meta">
-            <span>${escapeHtml(t.account_label)}</span>
-            <span>${escapeHtml(timeAgo(t.last_message_at))} ago</span>
-            ${t.product_slug ? `<span>→ ${escapeHtml(t.product_slug)}</span>` : ''}
-            <span style="flex:1;"></span>
-            ${hasAtom('messages.send.assigned-accounts') || hasAtom('messages.send.any-account')
-              ? `<button class="draft-btn" data-thread-id="${escapeHtml(t.id)}" data-msg="${escapeHtml(t.preview)}" style="padding:6px 12px;background:var(--primary);color:white;border:0;border-radius:5px;font-size:11px;font-family:inherit;cursor:pointer;font-weight:600;">Draft reply</button>`
-              : ''}
-          </div>
-          <div class="draft-output" id="draft-${escapeHtml(t.id)}" style="display:none;margin-top:10px;padding:12px;background:var(--surface-soft);border-radius:6px;border-left:3px solid var(--primary);"></div>
+
+    if (data.threads.length === 0) {
+      $('threads-list').innerHTML = '<div class="empty">No threads.</div>';
+      return;
+    }
+
+    // Group threads by account_label, sort groups by most-recent unread/activity
+    const sentIds = getSent();
+    const groups = new Map();
+    for (const t of data.threads) {
+      const key = t.account_label;
+      if (!groups.has(key)) groups.set(key, { label: key, threads: [], unread: 0, mostRecent: 0 });
+      const g = groups.get(key);
+      g.threads.push(t);
+      if (t.unread && !sentIds.has(t.id)) g.unread++;
+      const ts = new Date(t.last_message_at).getTime();
+      if (ts > g.mostRecent) g.mostRecent = ts;
+    }
+    // Sort: groups with unread first, then by most recent activity
+    const sortedGroups = [...groups.values()].sort((a, b) => {
+      if ((b.unread > 0) !== (a.unread > 0)) return (b.unread > 0) - (a.unread > 0);
+      return b.mostRecent - a.mostRecent;
+    });
+    // Within a group, threads sorted: unread+un-sent first, then by recency
+    for (const g of sortedGroups) {
+      g.threads.sort((a, b) => {
+        const aUnread = a.unread && !sentIds.has(a.id) ? 1 : 0;
+        const bUnread = b.unread && !sentIds.has(b.id) ? 1 : 0;
+        if (aUnread !== bUnread) return bUnread - aUnread;
+        return new Date(b.last_message_at) - new Date(a.last_message_at);
+      });
+    }
+
+    $('threads-list').innerHTML = sortedGroups.map(g => `
+      <div class="account-group">
+        <div class="account-group-head">
+          <span class="account-group-label">${escapeHtml(g.label)}</span>
+          <span class="account-group-meta">
+            ${g.threads.length} thread${g.threads.length === 1 ? '' : 's'}
+            ${g.unread > 0 ? `<span class="badge primary">${g.unread} unread</span>` : '<span class="badge success">caught up</span>'}
+          </span>
         </div>
-      `).join('');
+        <div class="account-group-body">
+          ${g.threads.map(t => renderThreadRow(t, sentIds)).join('')}
+        </div>
+      </div>
+    `).join('');
+
     // Wire draft-reply buttons
     document.querySelectorAll('.draft-btn').forEach(btn => {
       btn.addEventListener('click', e => {
@@ -419,6 +472,38 @@ async function loadMessages() {
   }
 }
 
+function renderThreadRow(t, sentIds) {
+  const wasSent = sentIds.has(t.id);
+  return `
+    <div class="thread" data-thread-id="${escapeHtml(t.id)}">
+      <div class="thread-line1">
+        ${t.unread && !wasSent ? '<span class="unread-dot"></span>' : ''}
+        <span class="thread-customer">${escapeHtml(t.customer_name)}</span>
+        <span class="thread-handle">${escapeHtml(t.customer_handle)}</span>
+        <span class="badge primary">${escapeHtml(t.intent)}</span>
+        ${wasSent ? '<span class="badge success">✓ replied</span>' : ''}
+      </div>
+      <div class="thread-line2">${escapeHtml(t.preview)}</div>
+      <div class="thread-meta">
+        <span>${escapeHtml(timeAgo(t.last_message_at))} ago</span>
+        ${t.product_slug ? `<span>→ ${escapeHtml(t.product_slug)}</span>` : ''}
+        <span style="flex:1;"></span>
+        ${hasAtom('messages.send.assigned-accounts') || hasAtom('messages.send.any-account')
+          ? `<button class="draft-btn" data-thread-id="${escapeHtml(t.id)}" data-msg="${escapeHtml(t.preview)}" style="padding:6px 12px;background:var(--primary);color:white;border:0;border-radius:5px;font-size:11px;font-family:inherit;cursor:pointer;font-weight:600;">${wasSent ? 'Draft another' : 'Draft reply'}</button>`
+          : ''}
+      </div>
+      <div class="draft-output" id="draft-${escapeHtml(t.id)}" style="display:none;margin-top:10px;padding:12px;background:var(--surface-soft);border-radius:6px;border-left:3px solid var(--primary);"></div>
+    </div>
+  `;
+}
+
+// Persisted shell-only state for "did the worker send this draft" — survives reloads,
+// drops when localStorage is cleared. Phase 1 will move to DB.
+const SENT_KEY = 'pasha-cockpit.sent-threads';
+function getSent() { try { return new Set(JSON.parse(localStorage.getItem(SENT_KEY) || '[]')); } catch { return new Set(); } }
+function markSent(threadId) { const s = getSent(); s.add(threadId); localStorage.setItem(SENT_KEY, JSON.stringify([...s])); }
+function unmarkSent(threadId) { const s = getSent(); s.delete(threadId); localStorage.setItem(SENT_KEY, JSON.stringify([...s])); }
+
 async function draftForThread(threadId, latestMessage, btn) {
   const output = $(`draft-${threadId}`);
   output.style.display = 'block';
@@ -427,38 +512,86 @@ async function draftForThread(threadId, latestMessage, btn) {
   const origText = btn.textContent;
   btn.textContent = '…';
   try {
-    const res = await fetch(`${API}/api/draft-reply`, {
-      method: 'POST',
-      headers: { 'X-Access-Code': getCode(), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ thread_id: threadId, latest_message: latestMessage }),
-    });
-    if (!res.ok) {
-      const errBody = await res.json().catch(() => ({}));
-      throw new Error(errBody.detail || errBody.error || `HTTP ${res.status}`);
-    }
-    const draft = await res.json();
-    const conf = Math.round((draft.intent_confidence || 0) * 100);
-    output.innerHTML = `
-      <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;font-size:11px;color:var(--dim);font-family:var(--mono);">
-        <span class="badge primary">${escapeHtml(draft.intent)}</span>
-        <span>${conf}% confidence</span>
-        ${draft.volunteered_financing ? '<span class="badge success">financing offered</span>' : ''}
-        ${draft.cta_to_visit ? '<span class="badge success">visit CTA</span>' : '<span class="badge warning">no CTA</span>'}
-      </div>
-      <div style="font-size:14px;line-height:1.5;color:var(--text);white-space:pre-wrap;padding:10px;background:white;border:1px solid var(--border);border-radius:5px;margin-bottom:8px;">${escapeHtml(draft.draft_reply)}</div>
-      <div style="font-size:11px;color:var(--dim);font-style:italic;margin-bottom:6px;">Why: ${escapeHtml(draft.reasoning)}</div>
-      ${draft.notes_for_human && draft.notes_for_human.length > 0 ? `
-        <div style="font-size:11px;color:var(--warning);margin-bottom:6px;">
-          <strong>Before sending:</strong> ${draft.notes_for_human.map(n => escapeHtml(n)).join(' · ')}
-        </div>` : ''}
-      <button onclick="navigator.clipboard.writeText(${JSON.stringify(draft.draft_reply)});this.textContent='✓ copied'" style="padding:5px 11px;background:var(--text);color:white;border:0;border-radius:4px;font-size:11px;font-family:inherit;cursor:pointer;">Copy draft</button>
-    `;
+    const draft = await callDrafter(threadId, latestMessage);
+    renderDraft(threadId, latestMessage, draft, output);
   } catch (err) {
     output.innerHTML = `<div style="color:var(--danger);font-size:12px;">Drafter error: ${escapeHtml(err.message)}</div>`;
   } finally {
     btn.disabled = false;
     btn.textContent = origText;
   }
+}
+
+async function callDrafter(threadId, latestMessage) {
+  const res = await fetch(`${API}/api/draft-reply`, {
+    method: 'POST',
+    headers: { 'X-Access-Code': getCode(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ thread_id: threadId, latest_message: latestMessage }),
+  });
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({}));
+    throw new Error(errBody.detail || errBody.error || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+function renderDraft(threadId, latestMessage, draft, output) {
+  const conf = Math.round((draft.intent_confidence || 0) * 100);
+  const isSent = getSent().has(threadId);
+  const draftId = `draft-text-${threadId}`;
+  const countId = `draft-count-${threadId}`;
+  output.innerHTML = `
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;font-size:11px;color:var(--dim);font-family:var(--mono);flex-wrap:wrap;">
+      <span class="badge primary">${escapeHtml(draft.intent)}</span>
+      <span>${conf}% confidence</span>
+      ${draft.volunteered_financing ? '<span class="badge success">financing offered</span>' : ''}
+      ${draft.cta_to_visit ? '<span class="badge success">visit CTA</span>' : '<span class="badge warning">no CTA</span>'}
+      ${isSent ? '<span class="badge success">✓ marked as sent</span>' : ''}
+    </div>
+    <div style="font-size:11px;color:var(--dim);margin-bottom:4px;font-family:var(--mono);text-transform:uppercase;letter-spacing:0.05em;">Customer wrote:</div>
+    <div style="padding:8px 10px;background:white;border-left:3px solid var(--dim);border-radius:0 5px 5px 0;font-size:13px;color:var(--text);margin-bottom:10px;font-style:italic;">"${escapeHtml(latestMessage)}"</div>
+    <div style="font-size:11px;color:var(--dim);margin-bottom:4px;font-family:var(--mono);text-transform:uppercase;letter-spacing:0.05em;">Drafted reply (editable):</div>
+    <textarea id="${draftId}" oninput="document.getElementById('${countId}').textContent = this.value.length + ' chars';" style="width:100%;min-height:90px;font:inherit;font-size:14px;line-height:1.5;color:var(--text);padding:10px;background:white;border:1px solid var(--border);border-radius:5px;margin-bottom:6px;resize:vertical;${isSent ? 'opacity:0.6;' : ''}">${escapeHtml(draft.draft_reply)}</textarea>
+    <div style="font-size:10px;color:var(--dim);font-family:var(--mono);margin-bottom:8px;text-align:right;"><span id="${countId}">${(draft.draft_reply || '').length} chars</span></div>
+    <div style="font-size:11px;color:var(--dim);font-style:italic;margin-bottom:6px;">Why: ${escapeHtml(draft.reasoning)}</div>
+    ${draft.notes_for_human && draft.notes_for_human.length > 0 ? `
+      <div style="font-size:11px;color:var(--warning);margin-bottom:8px;padding:8px 10px;background:rgba(184,134,11,0.08);border-radius:5px;">
+        <strong>Before sending:</strong> ${draft.notes_for_human.map(n => escapeHtml(n)).join(' · ')}
+      </div>` : ''}
+    <div style="display:flex;gap:6px;flex-wrap:wrap;">
+      <button class="copy-btn" data-target="${draftId}" style="padding:6px 12px;background:var(--text);color:white;border:0;border-radius:4px;font-size:11px;font-family:inherit;cursor:pointer;">Copy</button>
+      <button class="regen-btn" data-thread-id="${escapeHtml(threadId)}" data-msg="${escapeHtml(latestMessage)}" style="padding:6px 12px;background:var(--surface-soft);color:var(--text);border:1px solid var(--border);border-radius:4px;font-size:11px;font-family:inherit;cursor:pointer;">↻ Regenerate</button>
+      ${isSent
+        ? `<button class="unsend-btn" data-thread-id="${escapeHtml(threadId)}" style="padding:6px 12px;background:var(--surface-soft);color:var(--dim);border:1px solid var(--border);border-radius:4px;font-size:11px;font-family:inherit;cursor:pointer;margin-left:auto;">Un-mark sent</button>`
+        : `<button class="send-btn" data-thread-id="${escapeHtml(threadId)}" data-target="${draftId}" style="padding:6px 14px;background:var(--success);color:white;border:0;border-radius:4px;font-size:11px;font-family:inherit;cursor:pointer;font-weight:600;margin-left:auto;">✓ Mark as sent</button>`}
+    </div>
+  `;
+
+  // Wire up the new buttons
+  output.querySelectorAll('.copy-btn').forEach(b => b.addEventListener('click', () => {
+    const t = document.getElementById(b.dataset.target);
+    navigator.clipboard.writeText(t.value);
+    const orig = b.textContent; b.textContent = '✓ copied'; setTimeout(() => { b.textContent = orig; }, 1500);
+  }));
+  output.querySelectorAll('.send-btn').forEach(b => b.addEventListener('click', () => {
+    markSent(b.dataset.threadId);
+    renderDraft(threadId, latestMessage, { ...draft, draft_reply: document.getElementById(b.dataset.target).value }, output);
+  }));
+  output.querySelectorAll('.unsend-btn').forEach(b => b.addEventListener('click', () => {
+    unmarkSent(b.dataset.threadId);
+    renderDraft(threadId, latestMessage, draft, output);
+  }));
+  output.querySelectorAll('.regen-btn').forEach(b => b.addEventListener('click', async () => {
+    b.disabled = true; const orig = b.textContent; b.textContent = '…';
+    try {
+      const newDraft = await callDrafter(b.dataset.threadId, b.dataset.msg);
+      renderDraft(threadId, latestMessage, newDraft, output);
+    } catch (err) {
+      output.insertAdjacentHTML('beforeend', `<div style="color:var(--danger);font-size:11px;margin-top:6px;">Regenerate failed: ${escapeHtml(err.message)}</div>`);
+    } finally {
+      b.disabled = false; b.textContent = orig;
+    }
+  }));
 }
 
 // ============= Financing =============
