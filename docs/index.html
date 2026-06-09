@@ -748,6 +748,7 @@ h3 {
   <section class="view active" id="view-morning"></section>
   <section class="view" id="view-inbox"></section>
   <section class="view" id="view-inventory"></section>
+  <section class="view" id="view-order"></section>
   <section class="view" id="view-invoices"></section>
   <section class="view" id="view-customers"></section>
   <section class="view" id="view-ads"></section>
@@ -785,6 +786,7 @@ const I18N = {
     nav_team: 'Equipo',
     nav_reels: 'Videos',
     nav_scout: 'Scout',
+    nav_order: 'Pedido rápido',
     scout_title: 'Scout · próximo canal de publicidad',
     scout_intro: 'Oportunidades de publicidad investigadas con contacto, decisor, tamaño de audiencia y guion de acercamiento. Toca cualquier tarjeta para enviar el primer mensaje en 60 segundos.',
     scout_filter_all: 'Todas',
@@ -1008,6 +1010,7 @@ const I18N = {
     nav_team: 'Team',
     nav_reels: 'Videos',
     nav_scout: 'Scout',
+    nav_order: 'Easy order',
     scout_title: 'Scout · find the next advertising channel',
     scout_intro: 'Pre-researched advertising opportunities with contact, decision-maker, audience size, and outreach script. Tap any card to send the first message in 60 seconds.',
     scout_filter_all: 'All',
@@ -1441,7 +1444,8 @@ const I18N = {
     scout_send: 'Отправить',
     scout_save: 'Сохранить',
     scout_kill: 'Скрыть',
-    scout_powered: 'Исследование от Heisenbug Scout · обновляется еженедельно'
+    scout_powered: 'Исследование от Heisenbug Scout · обновляется еженедельно',
+    nav_order: 'Быстрый заказ'
   }
 };
 let LANG = 'en';
@@ -1672,6 +1676,7 @@ function renderNav() {
     ['morning', 'nav_morning'],
     ['inbox', 'nav_inbox'],
     ['inventory', 'nav_inventory'],
+    ['order', 'nav_order'],
     ['invoices', 'nav_invoices'],
     ['customers', 'nav_customers'],
     ['ads', 'nav_ads'],
@@ -1695,6 +1700,7 @@ function renderView() {
   if (CURRENT_VIEW === 'morning') renderMorning();
   if (CURRENT_VIEW === 'inbox') renderInbox();
   if (CURRENT_VIEW === 'inventory') renderInventory();
+  if (CURRENT_VIEW === 'order') renderOrder();
   if (CURRENT_VIEW === 'invoices') renderInvoices();
   if (CURRENT_VIEW === 'customers') renderCustomers();
   if (CURRENT_VIEW === 'ads') renderAds();
@@ -2129,6 +2135,139 @@ function openInvItem(sku) {
 }
 
 /* ============================================================
+   EASY ORDER VIEW — iPad walkaround mode. Salesperson is on the floor
+   with the customer, taps SKUs to build a cart, then "Save & checkout"
+   routes into the standard invoice flow (cash / card / finance).
+   ============================================================ */
+let ORDER_CART = { items: [], search: '', cat: 'all' };
+function renderOrder() {
+  if (!userCanSee('inventory_read')) {
+    document.getElementById('view-order').innerHTML = `<div class="empty">${t('permissions')} — needs <code>inventory_read</code></div>`;
+    return;
+  }
+  const q = (ORDER_CART.search || '').toLowerCase();
+  let items = INVENTORY.slice();
+  if (ORDER_CART.cat !== 'all') items = items.filter(i => i.cat === ORDER_CART.cat);
+  if (q) items = items.filter(i => i.name.toLowerCase().includes(q) || i.sku.toLowerCase().includes(q) || i.cat.toLowerCase().includes(q));
+  const cats = [...new Set(INVENTORY.map(i => i.cat))];
+  const cartTotal = ORDER_CART.items.reduce((s, x) => s + x.price * x.qty, 0);
+  const cartCount = ORDER_CART.items.reduce((s, x) => s + x.qty, 0);
+
+  const html = `
+    <div style="display:flex; align-items:baseline; justify-content:space-between; gap:12px; margin-bottom:6px;">
+      <h3 style="margin:0;">Easy order · walkaround</h3>
+      ${cartCount > 0 ? `<span class="badge primary" style="font-size:12px;">Cart: ${cartCount} item${cartCount === 1 ? '' : 's'} · $${cartTotal.toLocaleString()}</span>` : ''}
+    </div>
+    <p class="lead">Walking the floor with a customer? Tap a SKU to add it. When they're ready, hit Checkout — same payment + signature + print flow as any other sale.</p>
+
+    <div class="field">
+      <input class="input" placeholder="Search by name, SKU, or category..." value="${ORDER_CART.search}" oninput="ORDER_CART.search=this.value; renderOrder();" style="font-size:16px; padding:14px 16px;" autofocus>
+    </div>
+
+    <div class="scroll-x" style="margin-bottom:14px;">
+      <div style="display:inline-block;">
+        <button class="pill-filter ${ORDER_CART.cat === 'all' ? 'on' : ''}" onclick="ORDER_CART.cat='all'; renderOrder();">All</button>
+        ${cats.map(c => `<button class="pill-filter ${ORDER_CART.cat === c ? 'on' : ''}" onclick="ORDER_CART.cat='${c}'; renderOrder();">${c}</button>`).join('')}
+      </div>
+    </div>
+
+    <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(220px, 1fr)); gap:10px; margin-bottom:90px;">
+      ${items.length === 0 ? `<div class="empty" style="grid-column:1/-1;">No SKUs match.</div>` : items.map(i => {
+        const inCart = ORDER_CART.items.find(x => x.sku === i.sku);
+        const lowStock = i.qty <= 3;
+        return `
+          <div onclick="orderAddItem('${i.sku}')" style="background:var(--surface); border:0.5px solid ${inCart ? 'var(--primary)' : 'var(--border)'}; ${inCart ? 'box-shadow:0 0 0 2px var(--primary-soft);' : ''} border-radius:10px; padding:10px; cursor:pointer; min-height:120px; display:flex; flex-direction:column; gap:6px; position:relative;">
+            ${inCart ? `<div style="position:absolute; top:6px; right:6px; background:var(--primary); color:white; font-family:var(--label); font-weight:700; font-size:11px; padding:2px 8px; border-radius:10px;">×${inCart.qty}</div>` : ''}
+            <div style="display:flex; gap:8px; align-items:center;">
+              <div style="width:42px; height:42px; border-radius:6px; background:${i.color}; color:white; font-family:var(--serif); font-size:14px; display:flex; align-items:center; justify-content:center; font-weight:600; flex-shrink:0;">${i.sku.slice(0,3)}</div>
+              <div style="flex:1; min-width:0;">
+                <div style="font-family:var(--mono); font-size:10px; color:var(--dim); letter-spacing:0.8px;">${i.sku}</div>
+                <div style="font-family:var(--label); font-weight:700; font-size:11px; color:var(--dim); text-transform:uppercase;">${i.cat}</div>
+              </div>
+            </div>
+            <div style="font-weight:600; font-size:13px; line-height:1.25; flex:1;">${i.name}</div>
+            <div style="display:flex; justify-content:space-between; align-items:flex-end;">
+              <span style="font-family:var(--label); font-weight:700; font-size:11px; color:${lowStock ? 'var(--warning)' : 'var(--success)'}; text-transform:uppercase;">${i.qty} in stock</span>
+              <span style="font-family:var(--mono); font-weight:700; font-size:16px;">$${i.price.toLocaleString()}</span>
+            </div>
+          </div>`;
+      }).join('')}
+    </div>
+
+    ${ORDER_CART.items.length > 0 ? `
+      <div style="position:fixed; bottom:0; left:0; right:0; background:var(--surface); border-top:1px solid var(--border); padding:12px 16px; box-shadow:0 -4px 20px rgba(20,17,13,0.08); z-index:40;">
+        <div style="max-width:1080px; margin:0 auto; display:flex; gap:10px; align-items:center;">
+          <div style="flex:1;">
+            <div style="font-family:var(--label); font-weight:700; font-size:10px; color:var(--dim); text-transform:uppercase; letter-spacing:0.8px;">Cart · ${cartCount} items</div>
+            <div style="font-family:var(--mono); font-weight:700; font-size:20px;">$${cartTotal.toLocaleString()}</div>
+          </div>
+          <button class="btn ghost" onclick="orderViewCart()">Review cart</button>
+          <button class="btn primary" onclick="orderCheckout()">Checkout →</button>
+        </div>
+      </div>
+    ` : ''}
+  `;
+  document.getElementById('view-order').innerHTML = html;
+}
+
+function orderAddItem(sku) {
+  const it = INVENTORY.find(x => x.sku === sku);
+  const ex = ORDER_CART.items.find(x => x.sku === sku);
+  if (ex) ex.qty += 1;
+  else ORDER_CART.items.push({ sku: it.sku, name: it.name, price: it.price, qty: 1 });
+  renderOrder();
+}
+
+function orderViewCart() {
+  if (ORDER_CART.items.length === 0) return;
+  const total = ORDER_CART.items.reduce((s, x) => s + x.price * x.qty, 0);
+  openModal(`
+    <div class="modal-head">
+      <div>
+        <div style="font-weight:600; font-size:16px;">Review cart</div>
+        <div style="font-family:var(--label); font-weight:700; font-size:10px; color:var(--dim); margin-top:2px; text-transform:uppercase; letter-spacing:0.6px;">${ORDER_CART.items.length} SKUs · ${ORDER_CART.items.reduce((s,x)=>s+x.qty,0)} units</div>
+      </div>
+      <button class="modal-close" onclick="closeModal()">&times;</button>
+    </div>
+    ${ORDER_CART.items.map((x, idx) => `
+      <div style="display:flex; gap:8px; padding:10px 0; border-bottom:0.5px solid var(--border-soft); align-items:center;">
+        <div style="flex:1;">
+          <div style="font-size:14px; font-weight:600;">${x.name}</div>
+          <div style="font-family:var(--label); font-weight:600; font-size:11px; color:var(--dim);">${x.sku} · $${x.price} each</div>
+        </div>
+        <button onclick="orderDec(${idx})" style="width:30px; height:30px; border-radius:15px; border:0.5px solid var(--border); background:var(--surface); cursor:pointer; font-size:18px; line-height:1;">−</button>
+        <div style="min-width:28px; text-align:center; font-family:var(--mono); font-weight:700; font-size:15px;">${x.qty}</div>
+        <button onclick="orderInc(${idx})" style="width:30px; height:30px; border-radius:15px; border:0.5px solid var(--primary); background:var(--primary); color:white; cursor:pointer; font-size:18px; line-height:1;">+</button>
+        <div style="min-width:70px; text-align:right; font-family:var(--mono); font-weight:700; font-size:15px;">$${(x.price * x.qty).toLocaleString()}</div>
+      </div>
+    `).join('')}
+    <div style="display:flex; justify-content:space-between; padding:14px 0 8px; border-top:2px solid var(--ink); margin-top:8px;">
+      <span style="font-weight:700; font-size:15px;">TOTAL</span>
+      <span style="font-family:var(--mono); font-weight:700; font-size:22px;">$${total.toLocaleString()}</span>
+    </div>
+    <div style="display:flex; gap:8px; margin-top:14px;">
+      <button class="btn primary" style="flex:2;" onclick="closeModal(); orderCheckout();">Checkout →</button>
+      <button class="btn ghost" onclick="closeModal()">Keep shopping</button>
+    </div>
+    <button class="btn ghost full" style="margin-top:8px; color:var(--danger);" onclick="if(confirm('Clear the cart?')){ ORDER_CART.items = []; closeModal(); renderOrder(); }">Clear cart</button>
+  `);
+}
+function orderInc(idx) { ORDER_CART.items[idx].qty += 1; orderViewCart(); }
+function orderDec(idx) {
+  ORDER_CART.items[idx].qty -= 1;
+  if (ORDER_CART.items[idx].qty <= 0) ORDER_CART.items.splice(idx, 1);
+  if (ORDER_CART.items.length === 0) { closeModal(); renderOrder(); }
+  else orderViewCart();
+}
+function orderCheckout() {
+  if (ORDER_CART.items.length === 0) return;
+  // Hand the cart off to the standard new-invoice flow
+  NEW_INV = { items: ORDER_CART.items.slice(), customer: '', phone: '', email: '', method: 'cash', addr: '', search: '' };
+  ORDER_CART = { items: [], search: '', cat: 'all' };
+  renderNewInvoice();
+}
+
+/* ============================================================
    INVOICES VIEW — digital purchase orders + paper-scan capture
    ============================================================ */
 let INV_F = 'all';
@@ -2207,12 +2346,12 @@ function openInvoiceDetail(id) {
       <button class="modal-close" onclick="closeModal()">&times;</button>
     </div>
     ${inv.source === 'scanned' ? `<div class="card" style="background:var(--accent-soft); margin-bottom:14px; padding:10px; text-align:center; font-size:11px; color:var(--accent-deep); font-family:var(--mono); text-transform:uppercase; letter-spacing:1px;">${t('invoices_scanned')} · OCR applied</div>` : ''}
-    <div class="row"><span class="lbl">Cliente</span><span class="val">${inv.customer}</span></div>
+    <div class="row"><span class="lbl">Customer</span><span class="val">${inv.customer}</span></div>
     <div class="row"><span class="lbl">${t('delivery_address')}</span><span class="val" style="font-size:11px;">${inv.deliv_addr}</span></div>
     <div class="row"><span class="lbl">${t('payment_method')}</span><span class="val">${t('method_' + inv.method) || inv.method}</span></div>
     <div class="row"><span class="lbl">${t('customer_signature')}</span><span class="val" style="font-family:'Fraunces',serif; font-style:italic; color:${inv.signed ? 'var(--primary)' : 'var(--danger)'};">${inv.signed ? '✓ ' + inv.customer.split(' ')[0] : 'no firma'}</span></div>
     <div class="divider"></div>
-    <div style="font-family:var(--mono); font-size:10px; text-transform:uppercase; letter-spacing:1.5px; color:var(--dim); margin-bottom:8px;">Artículos</div>
+    <div style="font-family:var(--mono); font-size:10px; text-transform:uppercase; letter-spacing:1.5px; color:var(--dim); margin-bottom:8px;">Line items</div>
     ${inv.items.map(i => `
       <div class="row">
         <div style="flex:1;">
@@ -2290,7 +2429,7 @@ function renderNewInvoice() {
 
     ${NEW_INV.items.length > 0 ? `
       <div class="card tight" style="background:var(--surface-soft); margin-bottom:12px;">
-        <div style="font-family:var(--mono); font-size:10px; text-transform:uppercase; letter-spacing:1.5px; color:var(--dim); margin-bottom:6px;">Artículos en esta factura</div>
+        <div style="font-family:var(--mono); font-size:10px; text-transform:uppercase; letter-spacing:1.5px; color:var(--dim); margin-bottom:6px;">Items on this invoice</div>
         ${NEW_INV.items.map((x, idx) => `
           <div style="display:flex; gap:8px; padding:6px 0; border-bottom:0.5px solid var(--border-soft); align-items:center;">
             <div style="flex:1;">
@@ -2693,17 +2832,17 @@ function openScanInvoice() {
 function simulateScan() {
   openModal(`
     <div class="modal-head">
-      <div><div style="font-weight:600; font-size:16px;">${t('scan_modal_title')} · OCR resultado</div></div>
+      <div><div style="font-weight:600; font-size:16px;">${t('scan_modal_title')} · OCR result</div></div>
       <button class="modal-close" onclick="closeModal()">&times;</button>
     </div>
     <div class="card" style="background:var(--accent-soft); margin-bottom:12px;">
-      <div style="font-family:var(--mono); font-size:10px; text-transform:uppercase; letter-spacing:1.5px; color:var(--accent-deep); margin-bottom:6px;">Campos extraídos automáticamente · revisar</div>
+      <div style="font-family:var(--mono); font-size:10px; text-transform:uppercase; letter-spacing:1.5px; color:var(--accent-deep); margin-bottom:6px;">Fields auto-extracted · review before saving</div>
     </div>
-    <div class="field"><label class="field-lbl">Cliente (OCR)</label><input class="input" value="Carlos Mendez"></div>
-    <div class="field"><label class="field-lbl">Fecha (OCR)</label><input class="input" value="2026-06-08"></div>
+    <div class="field"><label class="field-lbl">Customer (OCR)</label><input class="input" value="Carlos Mendez"></div>
+    <div class="field"><label class="field-lbl">Date (OCR)</label><input class="input" value="2026-06-08"></div>
     <div class="field"><label class="field-lbl">Total (OCR)</label><input class="input" value="$849.00"></div>
     <div class="field"><label class="field-lbl">${t('payment_method')} (OCR)</label><input class="input" value="American Finance"></div>
-    <div class="field"><label class="field-lbl">Notas</label><textarea class="textarea">Queen Pillow-Top Mattress + Box Spring + Frame · entregar lunes</textarea></div>
+    <div class="field"><label class="field-lbl">Notes</label><textarea class="textarea">Queen Pillow-Top Mattress + Box Spring + Frame · deliver Monday</textarea></div>
     <button class="btn primary full" onclick="alert('Saved + filed (demo)'); closeModal();">${t('save_invoice')}</button>
   `);
 }
