@@ -813,7 +813,7 @@ h3 {
 
 <script>
 /* ============================================================
-   210 COCKPIT — Pasha's all-in-one operator app
+   210 COCKPIT — Paul Nimerovsky's all-in-one operator app
    Demo build · all client-side mock data
    Bilingual ES/EN · 6 modules · per-user permissions
    ============================================================ */
@@ -900,7 +900,7 @@ const I18N = {
     invoice_finance: 'Financiada',
     invoice_pending: 'Pendiente',
     scan_modal_title: 'Escanear factura en papel',
-    scan_modal_body: 'En la versión real, esto abre la cámara del teléfono. El sistema extrae automáticamente: nombre del cliente, artículos, total, fecha. Pasha o el vendedor confirma o corrige los campos antes de guardar.',
+    scan_modal_body: 'En la versión real, esto abre la cámara del teléfono. El sistema extrae automáticamente: nombre del cliente, artículos, total, fecha. Paul o el vendedor confirma o corrige los campos antes de guardar.',
     scan_simulate: 'Simular escaneo',
     new_invoice_title: 'Nueva factura digital',
     add_item: 'Agregar artículo',
@@ -976,7 +976,7 @@ const I18N = {
     in_stock: 'En existencia',
     composing_to: 'Componiendo a',
     review_response: 'Responder',
-    flag_pasha: 'Marcar para Pasha',
+    flag_pasha: 'Marcar para Paul',
     last_synced: 'Sincronizado hace',
     serious_lead: 'Lead serio',
     spam: 'Spam',
@@ -1042,7 +1042,7 @@ const I18N = {
     needs_reply: 'Necesita respuesta',
     you_replied: 'Tú respondiste',
     bot_replied: 'IA respondió',
-    awaiting_pasha: 'Esperando a Pasha',
+    awaiting_pasha: 'Esperando a Paul',
     follow_up_due: 'Seguimiento pendiente',
     sale_closed_by: 'Cierre por'
   },
@@ -1343,7 +1343,7 @@ const I18N = {
     in_stock: 'В наличии',
     composing_to: 'Пишу',
     review_response: 'Ответить',
-    flag_pasha: 'Передать Паше',
+    flag_pasha: 'Передать Paul',
     last_synced: 'Синхронизировано',
     serious_lead: 'Серьёзный лид',
     spam: 'Спам',
@@ -1409,7 +1409,7 @@ const I18N = {
     needs_reply: 'Нужен ответ',
     you_replied: 'Ты ответил',
     bot_replied: 'AI ответил',
-    awaiting_pasha: 'Ждёт Пашу',
+    awaiting_pasha: 'Ждёт Paul',
     follow_up_due: 'Нужно перезвонить',
     sale_closed_by: 'Закрыл сделку',
     invoices: 'Чеки и заказы',
@@ -1703,7 +1703,7 @@ const ACCOUNT_MSGS_YESTERDAY = [
 ];
 
 /* -------- STATE -------- */
-let CURRENT_USER = USERS[0]; // default Pasha
+let CURRENT_USER = USERS[0]; // default Paul Nimerovsky
 let CURRENT_VIEW = 'morning';
 let INBOX_FILTER = { platform: 'all', account: 'all', assigned: 'all', loc: 'all' };
 
@@ -1776,7 +1776,7 @@ function renderView() {
 }
 
 /* ============================================================
-   MORNING VIEW — Pasha's daily wake-up brief
+   MORNING VIEW — Paul's daily wake-up brief
    ============================================================ */
 function renderMorning() {
   const greet = new Date().getHours() < 12 ? t('greet_morning') : t('greet_afternoon');
@@ -3605,7 +3605,7 @@ const SCOUT_OPPS = [
     cost: '$0-300/month (event sponsorship) or $0 (booth at MWR new-arrival fairs)',
     contact: { name: 'JBSA MWR Marketing Office', phone: '(210) 671-2619', email: 'jbsa.mwr.marketing@us.af.mil', addr: '1701 Kenly Ave, JBSA-Randolph TX 78150' },
     why: 'Military families relocate every 2-4 years. They need furniture fast, on a fixed budget, and many qualify for special financing through Snap or Acima — exactly 210\'s wheelhouse. MWR partnerships put 210 directly in front of the newcomer briefing.',
-    script: 'Subject: Furniture partnership inquiry — 210 Discount Furniture\n\nHello,\n\nMy name is Paul Nimerovsky and I own 210 Discount Furniture at 10203 Kotzebue St, just a few miles from Lackland. We work with a lot of military families on PCS moves and I would like to explore a formal partnership with MWR — whether that\'s a booth at the newcomer fair, a sponsored promo in the MWR newsletter, or a referral discount for service members.\n\nWould you have 15 minutes for a call this week? I\'m flexible on your schedule.\n\nThank you for your time and your service.\n\nPasha · 210 Discount Furniture\n(210) 712-4700'
+    script: 'Subject: Furniture partnership inquiry — 210 Discount Furniture\n\nHello,\n\nMy name is Paul Nimerovsky and I own 210 Discount Furniture at 10203 Kotzebue St, just a few miles from Lackland. We work with a lot of military families on PCS moves and I would like to explore a formal partnership with MWR — whether that\'s a booth at the newcomer fair, a sponsored promo in the MWR newsletter, or a referral discount for service members.\n\nWould you have 15 minutes for a call this week? I\'m flexible on your schedule.\n\nThank you for your time and your service.\n\nPaul Nimerovsky · 210 Discount Furniture\n(210) 712-4700'
   },
   {
     id: 's2', cat: 'radio', score: 'high',
@@ -3615,7 +3615,7 @@ const SCOUT_OPPS = [
     cost: '$800-1,500/month for 20-30 sec spots, 12-18 per week in morning drive slot',
     contact: { name: 'iHeartMedia San Antonio Sales', phone: '(210) 829-1075', email: 'sanantoniosales@iheartmedia.com', addr: '6222 W IH-10, San Antonio TX 78201' },
     why: 'Paul\'s primary customer is Spanish-speaking, 30-50, working class. Tejano 107.5 is the dominant Spanish-language station in SA. A 30-sec spot in morning drive reaches the exact buyer demographic during their commute to work — when furniture decisions get made (paycheck just landed).',
-    script: 'Subject: Media kit request — Tejano 107.5 morning drive\n\nHello,\n\nI own 210 Discount Furniture in San Antonio and we want to test a Spanish-language radio campaign starting in July. Can you send me the media kit for Tejano 107.5, specifically morning drive pricing and reach data?\n\nWe\'re looking at a 30-day pilot with a clear measurable goal (in-store visits with a unique promo code), so I\'d also love to know what tracking options you support.\n\nThank you,\n\nPasha · 210 Discount Furniture\n(210) 712-4700 · pasha@210discountfurniture.com'
+    script: 'Subject: Media kit request — Tejano 107.5 morning drive\n\nHello,\n\nI own 210 Discount Furniture in San Antonio and we want to test a Spanish-language radio campaign starting in July. Can you send me the media kit for Tejano 107.5, specifically morning drive pricing and reach data?\n\nWe\'re looking at a 30-day pilot with a clear measurable goal (in-store visits with a unique promo code), so I\'d also love to know what tracking options you support.\n\nThank you,\n\nPaul Nimerovsky · 210 Discount Furniture\n(210) 712-4700 · pasha@210discountfurniture.com'
   },
   {
     id: 's3', cat: 'community', score: 'high',
@@ -3625,7 +3625,7 @@ const SCOUT_OPPS = [
     cost: '$50 referral fee per closed sale + 1-page collateral · ~$200 one-time for printed flyers per office',
     contact: { name: 'Top 3 to start: The Heights at Stone Oak · Cumberland on Bandera · Camden Spring Creek', phone: 'Property management direct numbers via Apartments.com', email: 'leasing@thencompanyname.com (pattern)', addr: 'Various ZIPs 78232, 78231, 78230' },
     why: 'New apartment tenants spend $1,500-$4,000 on furniture in the first 60 days. The leasing office is the highest-trust pre-purchase touch they have. A $50 referral fee is trivial against the LTV.',
-    script: 'Subject: Furniture referral partnership for [Property Name] residents\n\nHi,\n\nMy name is Paul Nimerovsky and I own 210 Discount Furniture, about 4 miles from your property. I\'d like to propose a referral arrangement: I provide your leasing team with a 1-page sheet to hand to new tenants, and I pay your office $50 for every signed lease that ends up buying from us (tracked by a unique promo code).\n\nNo cost to your office, your tenants get a discount on their first purchase, and you have a turnkey "first 60 days" furniture solution to offer.\n\nCan we meet for 15 minutes this week? I can come to your office.\n\nThank you,\n\nPasha · 210 Discount Furniture\n(210) 712-4700'
+    script: 'Subject: Furniture referral partnership for [Property Name] residents\n\nHi,\n\nMy name is Paul Nimerovsky and I own 210 Discount Furniture, about 4 miles from your property. I\'d like to propose a referral arrangement: I provide your leasing team with a 1-page sheet to hand to new tenants, and I pay your office $50 for every signed lease that ends up buying from us (tracked by a unique promo code).\n\nNo cost to your office, your tenants get a discount on their first purchase, and you have a turnkey "first 60 days" furniture solution to offer.\n\nCan we meet for 15 minutes this week? I can come to your office.\n\nThank you,\n\nPaul Nimerovsky · 210 Discount Furniture\n(210) 712-4700'
   },
   {
     id: 's4', cat: 'outdoor', score: 'high',
@@ -3645,7 +3645,7 @@ const SCOUT_OPPS = [
     cost: '$200/month for a 1/4 page bulletin ad · 12-month minimum',
     contact: { name: 'Parish Office · Fr. Joseph Aguilar', phone: '(210) 226-1308', email: 'parish.office@sastanthonycatholic.org', addr: '102 Lavaca St, San Antonio TX 78210' },
     why: 'Hispanic Catholic community trust is one of the highest-leverage signals in SA. Church bulletin ads convert at 4-7x vs paid social in this demo. A 1-line "as advertised in the parish bulletin" on the in-store collateral closes the loop.',
-    script: 'Subject: Bulletin sponsorship inquiry from 210 Discount Furniture\n\nHello Father,\n\nMy name is Paul Nimerovsky and I own 210 Discount Furniture. We serve many families from your parish and I would like to support the parish through a bulletin sponsorship.\n\nCould you let me know the rate sheet for monthly placement, and whether 12-month commitments are available?\n\nThank you for your time,\n\nPasha · 210 Discount Furniture\n(210) 712-4700'
+    script: 'Subject: Bulletin sponsorship inquiry from 210 Discount Furniture\n\nHello Father,\n\nMy name is Paul Nimerovsky and I own 210 Discount Furniture. We serve many families from your parish and I would like to support the parish through a bulletin sponsorship.\n\nCould you let me know the rate sheet for monthly placement, and whether 12-month commitments are available?\n\nThank you for your time,\n\nPaul Nimerovsky · 210 Discount Furniture\n(210) 712-4700'
   },
   {
     id: 's6', cat: 'digital', score: 'med',
@@ -3655,7 +3655,7 @@ const SCOUT_OPPS = [
     cost: '$200-800 per creator per post · pilot with 3 creators = $1,500-2,400',
     contact: { name: 'Targets to vet: @miguelinasatx · @elena.satx · @ramonpalacios · @lauriescomesa · @doloresalatx', phone: 'TikTok DM each — no phone needed for first contact', email: 'Some have Linktree → email; otherwise DM', addr: 'All SA-based per their bios' },
     why: 'Lower-cost than radio, higher-engagement than passive ads, and the content (creator filming themselves at 210 showroom) doubles as user-generated video for 210\'s own TikTok. Conversion math: $400 pilot post × 8K avg reach × 2% click = 160 visitors × 8% close × $1,200 avg ticket = $15K in attributable sales if it works.',
-    script: 'Subject (DM): Quick partnership idea from 210 Discount Furniture\n\nHi [name],\n\nLove what you do for the SA Latino community. I own 210 Discount Furniture and want to explore a paid partnership — you come to the showroom, pick out a sectional or bedroom set you actually like, post about it with our financing message, and we pay you for the post + you keep a discount on anything you want to buy.\n\nFlexible on creative direction. Want to chat?\n\nPasha · 210 Discount Furniture\n(210) 712-4700'
+    script: 'Subject (DM): Quick partnership idea from 210 Discount Furniture\n\nHi [name],\n\nLove what you do for the SA Latino community. I own 210 Discount Furniture and want to explore a paid partnership — you come to the showroom, pick out a sectional or bedroom set you actually like, post about it with our financing message, and we pay you for the post + you keep a discount on anything you want to buy.\n\nFlexible on creative direction. Want to chat?\n\nPaul Nimerovsky · 210 Discount Furniture\n(210) 712-4700'
   },
   {
     id: 's7', cat: 'military', score: 'med',
@@ -3665,7 +3665,7 @@ const SCOUT_OPPS = [
     cost: '$0 if accepted as a vendor at the newcomer briefing · cost is staff time (4hr/month + collateral)',
     contact: { name: 'Fort Sam Houston Welcome Center', phone: '(210) 221-2256', email: 'jbsa.fsh.welcome@us.army.mil', addr: '2748 Worth Rd, JBSA-Fort Sam Houston TX 78234' },
     why: 'Same logic as JBSA Lackland but Fort Sam has more medical-training pipeline = constant churn = consistent new-furniture demand. Two military advertising plays in parallel hedges the bet.',
-    script: 'Subject: Vendor inquiry — newcomer briefing\n\nHello,\n\nMy name is Paul Nimerovsky and I own 210 Discount Furniture in San Antonio. We work with a lot of newly-arrived service members and would like to apply to be a vendor at your monthly newcomer briefing.\n\nWho should I speak with about the application process, and is there a fee or qualification standard?\n\nThank you for your service and for your time.\n\nPasha · 210 Discount Furniture\n(210) 712-4700'
+    script: 'Subject: Vendor inquiry — newcomer briefing\n\nHello,\n\nMy name is Paul Nimerovsky and I own 210 Discount Furniture in San Antonio. We work with a lot of newly-arrived service members and would like to apply to be a vendor at your monthly newcomer briefing.\n\nWho should I speak with about the application process, and is there a fee or qualification standard?\n\nThank you for your service and for your time.\n\nPaul Nimerovsky · 210 Discount Furniture\n(210) 712-4700'
   },
   {
     id: 's8', cat: 'digital', score: 'low',
