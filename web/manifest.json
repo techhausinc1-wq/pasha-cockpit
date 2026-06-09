@@ -1,0 +1,22 @@
+{
+  "name": "210 Cockpit — Pasha",
+  "short_name": "210 Cockpit",
+  "description": "Tu negocio · una pantalla. Mensajes, inventario, facturas, equipo, publicidad.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#f7f6f1",
+  "theme_color": "#5d85a5",
+  "lang": "es",
+  "categories": ["business", "productivity"],
+  "icons": [
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" },
+    { "src": "icons/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "Mañana", "short_name": "Mañana", "url": "./index.html#morning", "description": "Resumen del día" },
+    { "name": "Mensajes", "short_name": "Mensajes", "url": "./index.html#inbox", "description": "Bandeja unificada" },
+    { "name": "Facturas", "short_name": "Facturas", "url": "./index.html#invoices", "description": "Nueva factura digital o escanear papel" }
+  ]
+}

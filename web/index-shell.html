@@ -1,0 +1,726 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Pasha cockpit (shell)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #f7f6f1;
+  --surface: #ffffff;
+  --surface-soft: #f0ecdf;
+  --border: #e0dbcd;
+  --border-soft: #ece8d9;
+  --text: #1c1a16;
+  --dim: #76705f;
+  --primary: #c46a3b;
+  --primary-soft: #faecdf;
+  --success: #2d7a3e;
+  --warning: #b8860b;
+  --danger: #b8463a;
+  --font: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, sans-serif;
+  --mono: "JetBrains Mono", "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14110d;
+    --surface: #1f1b15;
+    --surface-soft: #2a251c;
+    --border: #3b3528;
+    --border-soft: #2d2820;
+    --text: #f0ede5;
+    --dim: #968d76;
+    --primary: #e08a5a;
+    --primary-soft: #3a2820;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; font-family: var(--font); background: var(--bg); color: var(--text); -webkit-font-smoothing: antialiased; line-height: 1.4; }
+header { position: sticky; top: 0; z-index: 30; background: var(--surface); border-bottom: 1px solid var(--border); padding: 12px 24px; display: flex; align-items: center; gap: 14px; }
+header .brand { font-weight: 700; font-size: 16px; }
+header .brand b { color: var(--primary); }
+header .brand-sub { font-size: 11px; color: var(--dim); font-family: var(--mono); margin-left: 8px; }
+header nav { display: flex; gap: 12px; margin-left: 18px; }
+header nav button { background: none; border: 0; color: var(--dim); font-family: inherit; font-size: 13px; padding: 4px 0; cursor: pointer; }
+header nav button:hover { color: var(--text); }
+header nav button.active { color: var(--primary); border-bottom: 2px solid var(--primary); }
+header .spacer { flex: 1; }
+header .who { font-size: 12px; color: var(--dim); font-family: var(--mono); }
+header select { background: var(--surface-soft); border: 1px solid var(--border); border-radius: 5px; padding: 4px 8px; font-family: inherit; font-size: 12px; color: var(--text); cursor: pointer; }
+
+main { max-width: 1280px; margin: 0 auto; padding: 22px; }
+
+h2 { margin: 0 0 12px; font-size: 13px; font-weight: 600; color: var(--dim); text-transform: uppercase; letter-spacing: 0.5px; }
+.subtle { font-size: 11px; color: var(--dim); font-family: var(--mono); }
+
+.dash-row {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 16px; margin-bottom: 18px;
+}
+
+.card {
+  background: var(--surface); border: 1px solid var(--border-soft);
+  border-radius: 10px; padding: 16px;
+}
+.card.flag { border-color: var(--warning); background: linear-gradient(135deg, var(--surface) 0%, var(--surface-soft) 100%); }
+
+.stat-strip { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+.stat-box { background: var(--surface-soft); border-radius: 6px; padding: 10px 12px; }
+.stat-num { font-size: 22px; font-weight: 700; font-family: var(--mono); }
+.stat-label { font-size: 11px; color: var(--dim); margin-top: 2px; }
+.stat-trend { font-size: 10px; color: var(--dim); margin-top: 2px; }
+
+.list { display: grid; gap: 4px; }
+.row { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--border-soft); font-size: 13px; align-items: baseline; gap: 12px; }
+.row:last-child { border-bottom: none; }
+.row .label { font-weight: 500; }
+.row .meta { font-size: 11px; color: var(--dim); font-family: var(--mono); }
+.row .value { font-family: var(--mono); font-size: 13px; }
+
+.badge { display: inline-block; padding: 1px 7px; font-size: 11px; border-radius: 10px; background: var(--surface-soft); color: var(--dim); font-family: var(--mono); }
+.badge.success { background: rgba(45,122,62,0.12); color: var(--success); }
+.badge.warning { background: rgba(184,134,11,0.12); color: var(--warning); }
+.badge.danger  { background: rgba(184,70,58,0.12);  color: var(--danger); }
+.badge.primary { background: var(--primary-soft); color: var(--primary); }
+
+.thread { padding: 10px 0; border-bottom: 1px solid var(--border-soft); cursor: pointer; }
+.thread:hover .thread-customer { color: var(--primary); }
+.thread:last-child { border-bottom: none; }
+.thread-line1 { display: flex; gap: 8px; align-items: baseline; font-size: 13px; margin-bottom: 4px; }
+.thread-customer { font-weight: 600; }
+.thread-handle { color: var(--dim); font-family: var(--mono); font-size: 11px; }
+.thread-line2 { font-size: 12px; color: var(--dim); line-height: 1.4; }
+.thread-meta { display: flex; gap: 8px; margin-top: 4px; font-size: 10px; color: var(--dim); font-family: var(--mono); }
+.thread .unread-dot { display: inline-block; width: 7px; height: 7px; background: var(--primary); border-radius: 50%; margin-right: 4px; }
+
+.waterfall { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr 1fr; gap: 6px; margin-top: 8px; font-size: 11px; }
+.waterfall-step { padding: 6px 8px; border-radius: 5px; text-align: center; border: 1px solid var(--border-soft); }
+.waterfall-step.declined { background: rgba(184,70,58,0.08); color: var(--danger); border-color: rgba(184,70,58,0.3); }
+.waterfall-step.pending  { background: rgba(184,134,11,0.10); color: var(--warning); border-color: rgba(184,134,11,0.3); }
+.waterfall-step.approved { background: rgba(45,122,62,0.10);  color: var(--success); border-color: rgba(45,122,62,0.3); font-weight: 600; }
+
+.app-row { padding: 12px 0; border-bottom: 1px solid var(--border-soft); }
+.app-row:last-child { border-bottom: none; }
+.app-row-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.app-row-name { font-weight: 600; font-size: 14px; }
+.app-row-ticket { font-family: var(--mono); font-weight: 700; color: var(--text); }
+
+.locked {
+  padding: 14px; background: var(--surface-soft);
+  border: 1px dashed var(--border); border-radius: 8px;
+  color: var(--dim); font-size: 13px; text-align: center;
+}
+
+/* Catalog view */
+.catalog-controls { display: flex; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; align-items: center; }
+.catalog-controls input, .catalog-controls select { padding: 7px 10px; font-family: inherit; font-size: 13px; border: 1px solid var(--border); border-radius: 5px; background: var(--surface); color: var(--text); }
+.catalog-controls input { min-width: 240px; }
+.catalog-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+.catalog-card { background: var(--surface); border: 1px solid var(--border-soft); border-radius: 8px; overflow: hidden; cursor: pointer; transition: transform 0.1s, box-shadow 0.1s; }
+.catalog-card:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.06); }
+.catalog-card img { width: 100%; aspect-ratio: 4/3; object-fit: cover; background: var(--surface-soft); }
+.catalog-card-body { padding: 9px 11px 11px; }
+.catalog-card-name { font-size: 12px; font-weight: 500; min-height: 28px; line-height: 1.3; margin-bottom: 4px; overflow: hidden; }
+.catalog-card-price { font-size: 14px; font-weight: 700; color: var(--primary); font-family: var(--mono); }
+
+/* Empty states */
+.empty { padding: 30px 14px; color: var(--dim); font-size: 13px; text-align: center; }
+
+/* Account groups (Messages view) */
+.account-group { margin-bottom: 22px; }
+.account-group:last-child { margin-bottom: 0; }
+.account-group-head {
+  display: flex; justify-content: space-between; align-items: baseline;
+  padding: 8px 0 6px;
+  border-bottom: 2px solid var(--border);
+  margin-bottom: 4px;
+}
+.account-group-label {
+  font-family: var(--mono); font-size: 11px; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--text); font-weight: 600;
+}
+.account-group-meta {
+  display: flex; gap: 6px; align-items: baseline;
+  font-size: 11px; color: var(--dim);
+}
+.account-group-body { padding-left: 6px; }
+
+@media (max-width: 760px) {
+  header { padding: 10px 12px; flex-wrap: wrap; }
+  header nav { margin-left: 0; }
+  main { padding: 12px; }
+  .dash-row { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">Pas<b>ha</b><span class="brand-sub">cockpit · shell</span></div>
+  <nav>
+    <button data-view="dashboard" class="active">Dashboard</button>
+    <button data-view="messages">Messages</button>
+    <button data-view="financing">Financing</button>
+    <button data-view="catalog">Catalog</button>
+    <button data-view="money">Money</button>
+  </nav>
+  <div class="spacer"></div>
+  <div class="who" id="who">…</div>
+  <select id="user-switcher" title="Shell role switcher — pick which user you're logged in as"></select>
+</header>
+
+<main>
+
+  <!-- =========== Dashboard view =========== -->
+  <section id="view-dashboard" class="view">
+
+    <div class="dash-row">
+      <div class="card">
+        <h2>Right now</h2>
+        <div class="list" id="rightnow-list"></div>
+      </div>
+      <div class="card">
+        <h2>Today</h2>
+        <div class="stat-strip" id="today-stats"></div>
+      </div>
+      <div class="card" id="money-card">
+        <h2>Money <span class="subtle" id="money-card-perm-note"></span></h2>
+        <div class="list" id="money-list"></div>
+      </div>
+      <div class="card" id="watch-card">
+        <h2>Watch <span class="subtle" id="watch-card-perm-note"></span></h2>
+        <div class="list" id="watch-list"></div>
+      </div>
+    </div>
+
+    <div class="dash-row" id="leaderboard-row" style="display:none;">
+      <div class="card" style="grid-column: 1 / -1;">
+        <h2>Worker leaderboard <span class="subtle">today</span></h2>
+        <div class="list" id="leaderboard-list"></div>
+      </div>
+    </div>
+
+  </section>
+
+  <!-- =========== Messages view =========== -->
+  <section id="view-messages" class="view" hidden>
+    <div class="card">
+      <h2>Threads <span class="subtle" id="threads-perm-note"></span></h2>
+      <div id="threads-list"></div>
+    </div>
+  </section>
+
+  <!-- =========== Financing view =========== -->
+  <section id="view-financing" class="view" hidden>
+    <div class="card">
+      <h2>Applications in progress <span class="subtle" id="financing-perm-note"></span></h2>
+      <div id="apps-list"></div>
+    </div>
+  </section>
+
+  <!-- =========== Catalog view =========== -->
+  <section id="view-catalog" class="view" hidden>
+    <div class="card">
+      <h2>Product catalog <span class="subtle" id="catalog-meta"></span></h2>
+      <div class="catalog-controls">
+        <input type="text" id="catalog-q" placeholder="Search name, SKU, slug…">
+        <select id="catalog-cat"><option value="">All categories</option></select>
+      </div>
+      <div class="catalog-grid" id="catalog-grid"></div>
+    </div>
+  </section>
+
+  <!-- =========== Money view =========== -->
+  <section id="view-money" class="view" hidden>
+    <div class="dash-row">
+      <div class="card" style="grid-column: 1 / -1;">
+        <h2>Accounts Payable <span class="subtle" id="ap-perm-note"></span></h2>
+        <div id="ap-list"></div>
+      </div>
+      <div class="card" style="grid-column: 1 / -1;">
+        <h2>Tax + compliance <span class="subtle" id="tax-perm-note"></span></h2>
+        <div id="tax-list"></div>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<script>
+// Shell-only: hardcoded API base = same origin (worker serves both static + API)
+const API = '';
+
+// Active access code lives in localStorage so role-switch persists across reloads
+const STORAGE_CODE = 'pasha-cockpit.access-code';
+function getCode() { return localStorage.getItem(STORAGE_CODE) || 'pasha-shell-paul'; }
+function setCode(c) { localStorage.setItem(STORAGE_CODE, c); }
+
+async function api(path) {
+  const res = await fetch(`${API}${path}`, { headers: { 'X-Access-Code': getCode() } });
+  if (!res.ok) {
+    let body = null;
+    try { body = await res.json(); } catch {}
+    const err = new Error(body?.error || `HTTP ${res.status}`);
+    err.status = res.status;
+    err.body = body;
+    throw err;
+  }
+  return res.json();
+}
+
+const $ = id => document.getElementById(id);
+const escapeHtml = s => String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function timeAgo(iso) {
+  if (!iso) return '—';
+  const ms = Date.now() - new Date(iso).getTime();
+  if (ms < 60_000) return Math.floor(ms / 1000) + 's';
+  if (ms < 3_600_000) return Math.floor(ms / 60_000) + 'm';
+  if (ms < 86_400_000) return Math.floor(ms / 3_600_000) + 'h';
+  return Math.floor(ms / 86_400_000) + 'd';
+}
+
+let CURRENT_USER = null;
+let CURRENT_ATOMS = new Set();
+let CATALOG = null;
+
+function hasAtom(a) { return CURRENT_ATOMS.has(a); }
+
+// ============= View routing =============
+function setView(v) {
+  document.querySelectorAll('header nav button').forEach(b => b.classList.toggle('active', b.dataset.view === v));
+  document.querySelectorAll('main .view').forEach(s => s.hidden = s.id !== `view-${v}`);
+  if (v === 'catalog' && !CATALOG) loadCatalog();
+  if (v === 'messages') loadMessages();
+  if (v === 'financing') loadFinancing();
+  if (v === 'money') loadMoneyView();
+}
+
+// ============= User switcher =============
+async function loadUserOptions() {
+  const data = await fetch(`${API}/api/_shell/users`).then(r => r.json());
+  const sel = $('user-switcher');
+  sel.innerHTML = data.users.map(u => `<option value="${escapeHtml(u.access_code)}">${escapeHtml(u.name)} · ${u.role}</option>`).join('');
+  sel.value = getCode();
+  sel.addEventListener('change', () => { setCode(sel.value); boot(); });
+}
+
+async function loadMe() {
+  try {
+    const data = await api('/api/whoami');
+    CURRENT_USER = data.user;
+    CURRENT_ATOMS = new Set(data.atoms);
+    if (!CURRENT_USER) {
+      $('who').textContent = 'not authenticated';
+      return;
+    }
+    $('who').innerHTML = `${escapeHtml(CURRENT_USER.name)} · <span style="color: var(--primary);">${escapeHtml(CURRENT_USER.role)}</span> · ${CURRENT_ATOMS.size} perms`;
+  } catch (err) {
+    $('who').textContent = 'auth error';
+  }
+}
+
+// ============= Dashboard =============
+async function loadDashboard() {
+  try {
+    const [data, summary] = await Promise.all([
+      api('/api/dashboard/today'),
+      api('/api/dashboard/summary'),
+    ]);
+
+    // Right now — derived from live sample state
+    const t = summary.threads;
+    const f = summary.financing;
+    const threadLine = t.unread === 0
+      ? `<div class="row"><span class="label">Inbox clear</span><span class="badge success">caught up</span></div>`
+      : `<div class="row"><span class="label">${t.unread} ${t.unread === 1 ? 'message' : 'messages'} waiting</span><span class="meta">${t.waiting_over_30min > 0 ? `<span class="badge danger">${t.waiting_over_30min} over 30 min</span>` : 'all under 30 min'}</span></div>`;
+    const finLine = f.in_progress_count === 0
+      ? `<div class="row"><span class="label">No financing apps active</span><span class="meta">—</span></div>`
+      : `<div class="row"><span class="label">${f.in_progress_count} financing app${f.in_progress_count === 1 ? '' : 's'} in progress</span><span class="meta">${f.in_progress_labels.join(' · ')}</span></div>`;
+    $('rightnow-list').innerHTML = threadLine + finLine +
+      summary.trucks.map(tr => `<div class="row"><span class="label">Truck — ${escapeHtml(tr.supplier)}</span><span class="meta">${escapeHtml(tr.arrives)} · ${tr.pieces} pcs</span></div>`).join('');
+
+    // Today stats
+    $('today-stats').innerHTML = data.stats.map(s => `
+      <div class="stat-box">
+        <div class="stat-num">${escapeHtml(s.value)}</div>
+        <div class="stat-label">${escapeHtml(s.label)}</div>
+        ${s.trend ? `<div class="stat-trend">${escapeHtml(s.trend)}</div>` : ''}
+      </div>
+    `).join('');
+
+    // Worker leaderboard (only if atom granted)
+    if (data.worker_leaderboard) {
+      $('leaderboard-row').style.display = '';
+      $('leaderboard-list').innerHTML = data.worker_leaderboard.map(w => `
+        <div class="row">
+          <span class="label">${escapeHtml(w.name)}</span>
+          <span class="meta">${w.messages} msgs · ${w.conversion} conv · ${w.quality_avg.toFixed(1)}/5 quality</span>
+        </div>
+      `).join('');
+    } else {
+      $('leaderboard-row').style.display = 'none';
+    }
+  } catch (err) {
+    $('rightnow-list').innerHTML = `<div class="empty" style="color:var(--danger);">${escapeHtml(err.message)}</div>`;
+  }
+
+  // Money card — gated by atom
+  if (hasAtom('money.read.ap-aging')) {
+    try {
+      const ap = await api('/api/money/ap');
+      const totalOpen = ap.invoices.filter(i => i.status === 'open').reduce((s, i) => s + i.amount, 0);
+      const totalOverdue = ap.invoices.filter(i => i.status === 'overdue').reduce((s, i) => s + i.amount, 0);
+      $('money-list').innerHTML = `
+        <div class="row"><span class="label">$${totalOverdue.toLocaleString()} overdue to suppliers</span><span class="badge danger">${ap.invoices.filter(i => i.status === 'overdue').length}</span></div>
+        <div class="row"><span class="label">$${totalOpen.toLocaleString()} due in &lt; 14 days</span><span class="meta">${ap.invoices.filter(i => i.status === 'open').length} invoices</span></div>
+        <div class="row"><span class="label">Sales tax accrued (May)</span><span class="value">$4,860</span></div>
+      `;
+    } catch {
+      $('money-list').innerHTML = '<div class="empty">money endpoints unavailable</div>';
+    }
+  } else {
+    $('money-card').classList.add('locked-card');
+    $('money-list').innerHTML = `<div class="locked">Locked — needs <code>money.read.ap-aging</code> permission</div>`;
+  }
+
+  // Watch card — also gated
+  if (hasAtom('notifications.regulatory') || hasAtom('money.read.tax-obligations')) {
+    try {
+      const t = await api('/api/money/tax');
+      $('watch-list').innerHTML = t.obligations.map(o => `
+        <div class="row">
+          <span class="label">${escapeHtml(o.name)}</span>
+          <span class="badge ${o.status === 'filed' ? 'success' : o.status === 'overdue' ? 'danger' : 'warning'}">${o.status}</span>
+        </div>
+      `).join('');
+    } catch {
+      $('watch-list').innerHTML = '<div class="empty">tax endpoints unavailable</div>';
+    }
+  } else {
+    $('watch-list').innerHTML = `<div class="locked">Locked — needs <code>notifications.regulatory</code> or <code>money.read.tax-obligations</code></div>`;
+  }
+}
+
+// ============= Messages =============
+async function loadMessages() {
+  try {
+    const data = await api('/api/threads');
+    const note = $('threads-perm-note');
+    if (CURRENT_ATOMS.has('messages.read.all')) note.textContent = 'all threads (master view)';
+    else if (CURRENT_ATOMS.has('messages.read.team')) note.textContent = 'team threads (your assigned accounts)';
+    else note.textContent = 'only your threads';
+
+    if (data.threads.length === 0) {
+      $('threads-list').innerHTML = '<div class="empty">No threads.</div>';
+      return;
+    }
+
+    // Group threads by account_label, sort groups by most-recent unread/activity
+    const sentIds = getSent();
+    const groups = new Map();
+    for (const t of data.threads) {
+      const key = t.account_label;
+      if (!groups.has(key)) groups.set(key, { label: key, threads: [], unread: 0, mostRecent: 0 });
+      const g = groups.get(key);
+      g.threads.push(t);
+      if (t.unread && !sentIds.has(t.id)) g.unread++;
+      const ts = new Date(t.last_message_at).getTime();
+      if (ts > g.mostRecent) g.mostRecent = ts;
+    }
+    // Sort: groups with unread first, then by most recent activity
+    const sortedGroups = [...groups.values()].sort((a, b) => {
+      if ((b.unread > 0) !== (a.unread > 0)) return (b.unread > 0) - (a.unread > 0);
+      return b.mostRecent - a.mostRecent;
+    });
+    // Within a group, threads sorted: unread+un-sent first, then by recency
+    for (const g of sortedGroups) {
+      g.threads.sort((a, b) => {
+        const aUnread = a.unread && !sentIds.has(a.id) ? 1 : 0;
+        const bUnread = b.unread && !sentIds.has(b.id) ? 1 : 0;
+        if (aUnread !== bUnread) return bUnread - aUnread;
+        return new Date(b.last_message_at) - new Date(a.last_message_at);
+      });
+    }
+
+    $('threads-list').innerHTML = sortedGroups.map(g => `
+      <div class="account-group">
+        <div class="account-group-head">
+          <span class="account-group-label">${escapeHtml(g.label)}</span>
+          <span class="account-group-meta">
+            ${g.threads.length} thread${g.threads.length === 1 ? '' : 's'}
+            ${g.unread > 0 ? `<span class="badge primary">${g.unread} unread</span>` : '<span class="badge success">caught up</span>'}
+          </span>
+        </div>
+        <div class="account-group-body">
+          ${g.threads.map(t => renderThreadRow(t, sentIds)).join('')}
+        </div>
+      </div>
+    `).join('');
+
+    // Wire draft-reply buttons
+    document.querySelectorAll('.draft-btn').forEach(btn => {
+      btn.addEventListener('click', e => {
+        e.stopPropagation();
+        draftForThread(btn.dataset.threadId, btn.dataset.msg, btn);
+      });
+    });
+  } catch (err) {
+    $('threads-list').innerHTML = `<div class="locked">${escapeHtml(err.message)}: needs <code>${escapeHtml(err.body?.missing_atom || 'messages.read.own')}</code> permission</div>`;
+  }
+}
+
+function renderThreadRow(t, sentIds) {
+  const wasSent = sentIds.has(t.id);
+  return `
+    <div class="thread" data-thread-id="${escapeHtml(t.id)}">
+      <div class="thread-line1">
+        ${t.unread && !wasSent ? '<span class="unread-dot"></span>' : ''}
+        <span class="thread-customer">${escapeHtml(t.customer_name)}</span>
+        <span class="thread-handle">${escapeHtml(t.customer_handle)}</span>
+        <span class="badge primary">${escapeHtml(t.intent)}</span>
+        ${wasSent ? '<span class="badge success">✓ replied</span>' : ''}
+      </div>
+      <div class="thread-line2">${escapeHtml(t.preview)}</div>
+      <div class="thread-meta">
+        <span>${escapeHtml(timeAgo(t.last_message_at))} ago</span>
+        ${t.product_slug ? `<span>→ ${escapeHtml(t.product_slug)}</span>` : ''}
+        <span style="flex:1;"></span>
+        ${hasAtom('messages.send.assigned-accounts') || hasAtom('messages.send.any-account')
+          ? `<button class="draft-btn" data-thread-id="${escapeHtml(t.id)}" data-msg="${escapeHtml(t.preview)}" style="padding:6px 12px;background:var(--primary);color:white;border:0;border-radius:5px;font-size:11px;font-family:inherit;cursor:pointer;font-weight:600;">${wasSent ? 'Draft another' : 'Draft reply'}</button>`
+          : ''}
+      </div>
+      <div class="draft-output" id="draft-${escapeHtml(t.id)}" style="display:none;margin-top:10px;padding:12px;background:var(--surface-soft);border-radius:6px;border-left:3px solid var(--primary);"></div>
+    </div>
+  `;
+}
+
+// Persisted shell-only state for "did the worker send this draft" — survives reloads,
+// drops when localStorage is cleared. Phase 1 will move to DB.
+const SENT_KEY = 'pasha-cockpit.sent-threads';
+function getSent() { try { return new Set(JSON.parse(localStorage.getItem(SENT_KEY) || '[]')); } catch { return new Set(); } }
+function markSent(threadId) { const s = getSent(); s.add(threadId); localStorage.setItem(SENT_KEY, JSON.stringify([...s])); }
+function unmarkSent(threadId) { const s = getSent(); s.delete(threadId); localStorage.setItem(SENT_KEY, JSON.stringify([...s])); }
+
+async function draftForThread(threadId, latestMessage, btn) {
+  const output = $(`draft-${threadId}`);
+  output.style.display = 'block';
+  output.innerHTML = '<div style="color:var(--dim);font-size:12px;">Drafting…</div>';
+  btn.disabled = true;
+  const origText = btn.textContent;
+  btn.textContent = '…';
+  try {
+    const draft = await callDrafter(threadId, latestMessage);
+    renderDraft(threadId, latestMessage, draft, output);
+  } catch (err) {
+    output.innerHTML = `<div style="color:var(--danger);font-size:12px;">Drafter error: ${escapeHtml(err.message)}</div>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = origText;
+  }
+}
+
+async function callDrafter(threadId, latestMessage) {
+  const res = await fetch(`${API}/api/draft-reply`, {
+    method: 'POST',
+    headers: { 'X-Access-Code': getCode(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ thread_id: threadId, latest_message: latestMessage }),
+  });
+  if (!res.ok) {
+    const errBody = await res.json().catch(() => ({}));
+    throw new Error(errBody.detail || errBody.error || `HTTP ${res.status}`);
+  }
+  return res.json();
+}
+
+function renderDraft(threadId, latestMessage, draft, output) {
+  const conf = Math.round((draft.intent_confidence || 0) * 100);
+  const isSent = getSent().has(threadId);
+  const draftId = `draft-text-${threadId}`;
+  const countId = `draft-count-${threadId}`;
+  output.innerHTML = `
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;font-size:11px;color:var(--dim);font-family:var(--mono);flex-wrap:wrap;">
+      <span class="badge primary">${escapeHtml(draft.intent)}</span>
+      <span>${conf}% confidence</span>
+      ${draft.volunteered_financing ? '<span class="badge success">financing offered</span>' : ''}
+      ${draft.cta_to_visit ? '<span class="badge success">visit CTA</span>' : '<span class="badge warning">no CTA</span>'}
+      ${isSent ? '<span class="badge success">✓ marked as sent</span>' : ''}
+    </div>
+    <div style="font-size:11px;color:var(--dim);margin-bottom:4px;font-family:var(--mono);text-transform:uppercase;letter-spacing:0.05em;">Customer wrote:</div>
+    <div style="padding:8px 10px;background:white;border-left:3px solid var(--dim);border-radius:0 5px 5px 0;font-size:13px;color:var(--text);margin-bottom:10px;font-style:italic;">"${escapeHtml(latestMessage)}"</div>
+    <div style="font-size:11px;color:var(--dim);margin-bottom:4px;font-family:var(--mono);text-transform:uppercase;letter-spacing:0.05em;">Drafted reply (editable):</div>
+    <textarea id="${draftId}" oninput="document.getElementById('${countId}').textContent = this.value.length + ' chars';" style="width:100%;min-height:90px;font:inherit;font-size:14px;line-height:1.5;color:var(--text);padding:10px;background:white;border:1px solid var(--border);border-radius:5px;margin-bottom:6px;resize:vertical;${isSent ? 'opacity:0.6;' : ''}">${escapeHtml(draft.draft_reply)}</textarea>
+    <div style="font-size:10px;color:var(--dim);font-family:var(--mono);margin-bottom:8px;text-align:right;"><span id="${countId}">${(draft.draft_reply || '').length} chars</span></div>
+    <div style="font-size:11px;color:var(--dim);font-style:italic;margin-bottom:6px;">Why: ${escapeHtml(draft.reasoning)}</div>
+    ${draft.notes_for_human && draft.notes_for_human.length > 0 ? `
+      <div style="font-size:11px;color:var(--warning);margin-bottom:8px;padding:8px 10px;background:rgba(184,134,11,0.08);border-radius:5px;">
+        <strong>Before sending:</strong> ${draft.notes_for_human.map(n => escapeHtml(n)).join(' · ')}
+      </div>` : ''}
+    <div style="display:flex;gap:6px;flex-wrap:wrap;">
+      <button class="copy-btn" data-target="${draftId}" style="padding:6px 12px;background:var(--text);color:white;border:0;border-radius:4px;font-size:11px;font-family:inherit;cursor:pointer;">Copy</button>
+      <button class="regen-btn" data-thread-id="${escapeHtml(threadId)}" data-msg="${escapeHtml(latestMessage)}" style="padding:6px 12px;background:var(--surface-soft);color:var(--text);border:1px solid var(--border);border-radius:4px;font-size:11px;font-family:inherit;cursor:pointer;">↻ Regenerate</button>
+      ${isSent
+        ? `<button class="unsend-btn" data-thread-id="${escapeHtml(threadId)}" style="padding:6px 12px;background:var(--surface-soft);color:var(--dim);border:1px solid var(--border);border-radius:4px;font-size:11px;font-family:inherit;cursor:pointer;margin-left:auto;">Un-mark sent</button>`
+        : `<button class="send-btn" data-thread-id="${escapeHtml(threadId)}" data-target="${draftId}" style="padding:6px 14px;background:var(--success);color:white;border:0;border-radius:4px;font-size:11px;font-family:inherit;cursor:pointer;font-weight:600;margin-left:auto;">✓ Mark as sent</button>`}
+    </div>
+  `;
+
+  // Wire up the new buttons
+  output.querySelectorAll('.copy-btn').forEach(b => b.addEventListener('click', () => {
+    const t = document.getElementById(b.dataset.target);
+    navigator.clipboard.writeText(t.value);
+    const orig = b.textContent; b.textContent = '✓ copied'; setTimeout(() => { b.textContent = orig; }, 1500);
+  }));
+  output.querySelectorAll('.send-btn').forEach(b => b.addEventListener('click', () => {
+    markSent(b.dataset.threadId);
+    renderDraft(threadId, latestMessage, { ...draft, draft_reply: document.getElementById(b.dataset.target).value }, output);
+  }));
+  output.querySelectorAll('.unsend-btn').forEach(b => b.addEventListener('click', () => {
+    unmarkSent(b.dataset.threadId);
+    renderDraft(threadId, latestMessage, draft, output);
+  }));
+  output.querySelectorAll('.regen-btn').forEach(b => b.addEventListener('click', async () => {
+    b.disabled = true; const orig = b.textContent; b.textContent = '…';
+    try {
+      const newDraft = await callDrafter(b.dataset.threadId, b.dataset.msg);
+      renderDraft(threadId, latestMessage, newDraft, output);
+    } catch (err) {
+      output.insertAdjacentHTML('beforeend', `<div style="color:var(--danger);font-size:11px;margin-top:6px;">Regenerate failed: ${escapeHtml(err.message)}</div>`);
+    } finally {
+      b.disabled = false; b.textContent = orig;
+    }
+  }));
+}
+
+// ============= Financing =============
+async function loadFinancing() {
+  try {
+    const data = await api('/api/financing/applications');
+    const note = $('financing-perm-note');
+    note.textContent = CURRENT_ATOMS.has('financing.read.all-applications') ? 'all applications (master view)' : 'your applications';
+    $('apps-list').innerHTML = data.applications.length === 0 ? '<div class="empty">No applications.</div>' :
+      data.applications.map(a => {
+        const lendersInPlay = ['AFF', 'Koalafi', 'Progressive', 'Snap', 'Kafene'];
+        const stepHtml = lendersInPlay.map(l => {
+          const attempt = a.lender_attempts.find(la => la.lender === l);
+          const cls = attempt ? attempt.decision : '';
+          const label = attempt ? `${l}<br>${attempt.decision}${attempt.amount ? ' $' + attempt.amount : ''}` : l;
+          return `<div class="waterfall-step ${cls}">${label}</div>`;
+        }).join('');
+        return `
+          <div class="app-row">
+            <div class="app-row-head">
+              <span class="app-row-name">${escapeHtml(a.customer_name)}</span>
+              <span class="app-row-ticket">$${a.ticket.toLocaleString()}</span>
+            </div>
+            <div class="subtle" style="margin: 4px 0 6px;">${escapeHtml(timeAgo(a.started_at))} ago · started by ${escapeHtml(a.worker_id)}</div>
+            <div class="waterfall">${stepHtml}</div>
+          </div>
+        `;
+      }).join('');
+  } catch (err) {
+    $('apps-list').innerHTML = `<div class="locked">${escapeHtml(err.message)}: needs <code>${escapeHtml(err.body?.missing_atom || 'financing.read.applications')}</code> permission</div>`;
+  }
+}
+
+// ============= Catalog =============
+async function loadCatalog() {
+  try {
+    const data = await api('/api/catalog');
+    CATALOG = data;
+    $('catalog-meta').textContent = `${data.product_count} SKUs · ${data.scraped_at?.slice(0, 10) || ''}`;
+    // Category dropdown
+    const cats = new Map();
+    for (const p of data.products) {
+      const k = p.category_path.join('/');
+      cats.set(k, (cats.get(k) || 0) + 1);
+    }
+    $('catalog-cat').innerHTML = '<option value="">All categories (' + data.products.length + ')</option>' +
+      [...cats.entries()].sort().map(([c, n]) => `<option value="${escapeHtml(c)}">${escapeHtml(c)} (${n})</option>`).join('');
+    renderCatalog();
+    $('catalog-q').addEventListener('input', renderCatalog);
+    $('catalog-cat').addEventListener('change', renderCatalog);
+  } catch (err) {
+    $('catalog-grid').innerHTML = `<div class="locked" style="grid-column: 1/-1;">${escapeHtml(err.message)}: needs <code>catalog.read</code></div>`;
+  }
+}
+function renderCatalog() {
+  if (!CATALOG) return;
+  const q = $('catalog-q').value.toLowerCase().trim();
+  const cat = $('catalog-cat').value;
+  let filtered = CATALOG.products;
+  if (cat) filtered = filtered.filter(p => p.category_path.join('/') === cat);
+  if (q) filtered = filtered.filter(p => (p.name + ' ' + (p.sku || '') + ' ' + p.slug).toLowerCase().includes(q));
+  const cap = 200;
+  const shown = filtered.slice(0, cap);
+  $('catalog-grid').innerHTML = shown.map(p => `
+    <div class="catalog-card">
+      ${p.photos[0]
+        ? `<img loading="lazy" src="${escapeHtml(p.photos[0])}" alt="${escapeHtml(p.name)}">`
+        : `<div style="aspect-ratio:4/3; background: var(--surface-soft); display:flex; align-items:center; justify-content:center; color:var(--dim); font-size:11px;">no photo</div>`}
+      <div class="catalog-card-body">
+        <div class="catalog-card-name">${escapeHtml(p.name)}</div>
+        <div class="catalog-card-price">${escapeHtml(p.price_text || '—')}</div>
+      </div>
+    </div>
+  `).join('') + (filtered.length > cap ? `<div style="grid-column:1/-1;" class="empty">Showing first ${cap} of ${filtered.length}. Refine search.</div>` : '');
+}
+
+// ============= Money view =============
+async function loadMoneyView() {
+  // AP
+  if (hasAtom('money.read.ap-aging')) {
+    try {
+      const data = await api('/api/money/ap');
+      $('ap-perm-note').textContent = `${data.invoices.length} invoices`;
+      $('ap-list').innerHTML = data.invoices.map(i => `
+        <div class="row">
+          <span class="label">${escapeHtml(i.supplier)} · ${escapeHtml(i.invoice_no)}</span>
+          <span class="meta">due ${escapeHtml(i.due_date)}</span>
+          <span class="value">$${i.amount.toLocaleString(undefined, {minimumFractionDigits: 2})}</span>
+          <span class="badge ${i.status === 'overdue' ? 'danger' : i.status === 'paid' ? 'success' : 'warning'}">${i.status}</span>
+        </div>
+      `).join('');
+    } catch (err) {
+      $('ap-list').innerHTML = `<div class="locked">${escapeHtml(err.message)}</div>`;
+    }
+  } else {
+    $('ap-list').innerHTML = '<div class="locked">Locked — needs <code>money.read.ap-aging</code></div>';
+  }
+
+  // Tax
+  if (hasAtom('money.read.tax-obligations')) {
+    try {
+      const data = await api('/api/money/tax');
+      $('tax-perm-note').textContent = `${data.obligations.length} obligations`;
+      $('tax-list').innerHTML = data.obligations.map(o => `
+        <div class="row">
+          <span class="label">${escapeHtml(o.name)}</span>
+          <span class="meta">${escapeHtml(o.agency)} · due ${escapeHtml(o.due_date)}</span>
+          ${o.amount_accrued ? `<span class="value">$${o.amount_accrued.toLocaleString()}</span>` : ''}
+          <span class="badge ${o.status === 'filed' ? 'success' : o.status === 'overdue' ? 'danger' : 'warning'}">${o.status}</span>
+        </div>
+      `).join('');
+    } catch (err) {
+      $('tax-list').innerHTML = `<div class="locked">${escapeHtml(err.message)}</div>`;
+    }
+  } else {
+    $('tax-list').innerHTML = '<div class="locked">Locked — needs <code>money.read.tax-obligations</code></div>';
+  }
+}
+
+// ============= Wire + boot =============
+document.querySelectorAll('header nav button').forEach(b => b.addEventListener('click', () => setView(b.dataset.view)));
+
+async function boot() {
+  await loadUserOptions();
+  await loadMe();
+  loadDashboard();
+}
+
+boot();
+</script>
+</body>
+</html>
