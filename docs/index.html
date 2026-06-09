@@ -2884,7 +2884,7 @@ function renderCustomers() {
 
     <div class="card" style="padding:0;">
       ${list.map(c => `
-        <div class="cust-row">
+        <div class="cust-row" onclick="openCustomerDetail('${c.id}')" style="cursor:pointer;">
           <div class="cust-avatar">${c.name.split(' ').map(x => x[0]).join('').slice(0,2)}</div>
           <div class="cust-body">
             <div class="cust-name">${c.name}</div>
@@ -2902,6 +2902,81 @@ function renderCustomers() {
     </div>
   `;
   document.getElementById('view-customers').innerHTML = html;
+}
+
+function openCustomerDetail(cid) {
+  const c = CUSTOMERS.find(x => x.id === cid);
+  if (!c) return;
+  // Find this customer's invoices (match by cust_id OR by name)
+  const myInvs = INVOICES.filter(i => i.cust_id === cid || i.customer === c.name);
+  const myInvTotal = myInvs.reduce((s, i) => s + i.total, 0);
+  // Find threads possibly from this customer
+  const myThreads = THREADS.filter(th => th.customer === c.name || (c.email && th.handle && th.handle.toLowerCase().includes(c.email.split('@')[0])));
+  openModal(`
+    <div class="modal-head">
+      <div>
+        <div style="display:flex; align-items:center; gap:10px;">
+          <div class="cust-avatar" style="width:38px; height:38px; font-size:14px;">${c.name.split(' ').map(x => x[0]).join('').slice(0,2)}</div>
+          <div>
+            <div style="font-weight:700; font-size:17px;">${c.name}</div>
+            <div style="font-family:var(--label); font-weight:700; font-size:10px; color:var(--dim); text-transform:uppercase; letter-spacing:0.6px; margin-top:2px;">${c.source} · since ${formatDate(c.last)}</div>
+          </div>
+        </div>
+      </div>
+      <button class="modal-close" onclick="closeModal()">&times;</button>
+    </div>
+
+    <div class="grid-4" style="margin-bottom:14px;">
+      <div class="stat"><div class="stat-num">$${c.spent.toLocaleString()}</div><div class="stat-lbl">Lifetime spend</div></div>
+      <div class="stat"><div class="stat-num">${myInvs.length}</div><div class="stat-lbl">Invoices</div></div>
+      <div class="stat"><div class="stat-num">${myThreads.length}</div><div class="stat-lbl">Threads</div></div>
+      <div class="stat"><div class="stat-num" style="font-size:14px; padding-top:6px;">${c.tags.includes('vip') ? 'VIP' : c.tags.includes('repeat') ? 'Repeat' : 'Active'}</div><div class="stat-lbl">Status</div></div>
+    </div>
+
+    <div class="card tight" style="background:var(--surface-soft); margin-bottom:14px;">
+      <div class="row" style="border:none; padding:4px 0;"><span class="lbl">Phone</span><span class="val">${c.phone || '—'}</span></div>
+      <div class="row" style="border:none; padding:4px 0;"><span class="lbl">Email</span><span class="val" style="font-size:11px;">${c.email ? c.email : `<span style="color:var(--warning);">none — ask at next visit</span>`}</span></div>
+      <div class="row" style="border:none; padding:4px 0;"><span class="lbl">Tags</span><span class="val">${c.tags.map(tg => `<span class="badge ${tg === 'vip' ? 'primary' : tg === 'no_email' ? 'warning' : ''}">${tg}</span>`).join(' ')}</span></div>
+    </div>
+
+    ${myInvs.length > 0 ? `
+    <div style="margin-bottom:14px;">
+      <h2 style="margin-bottom:6px;">Purchase history (${myInvs.length})</h2>
+      ${myInvs.map(inv => `
+        <div class="row" style="cursor:pointer;" onclick="closeModal(); setTimeout(() => openInvoiceDetail('${inv.id}'), 50);">
+          <div style="flex:1;">
+            <div class="lbl"><b>${inv.id}</b></div>
+            <div class="meta">${formatDate(inv.date)} · ${inv.items.length} items · ${inv.method}</div>
+          </div>
+          <div style="text-align:right;">
+            <div class="val">$${inv.total.toLocaleString()}</div>
+            <span class="badge ${inv.status === 'paid' ? 'success' : inv.status === 'pending' ? 'warning' : 'primary'}">${t('invoice_' + inv.status)}</span>
+          </div>
+        </div>
+      `).join('')}
+    </div>
+    ` : '<div style="padding:12px; background:var(--surface-soft); border-radius:8px; margin-bottom:14px; font-size:12px; color:var(--dim); text-align:center;">No invoices recorded for this customer yet.</div>'}
+
+    ${myThreads.length > 0 ? `
+    <div style="margin-bottom:14px;">
+      <h2 style="margin-bottom:6px;">Recent messages (${myThreads.length})</h2>
+      ${myThreads.slice(0, 5).map(th => `
+        <div class="row" style="cursor:pointer;" onclick="closeModal(); setTimeout(() => openThread('${th.id}'), 50);">
+          <div style="flex:1;">
+            <div class="lbl"><span class="plat ${th.platform}">${th.platform.toUpperCase()}</span> ${th.preview.slice(0, 60)}${th.preview.length > 60 ? '…' : ''}</div>
+            <div class="meta">${th.time} · ${th.intent || 'general'}</div>
+          </div>
+        </div>
+      `).join('')}
+    </div>
+    ` : ''}
+
+    <div style="display:flex; gap:8px; margin-top:14px; flex-wrap:wrap;">
+      ${c.phone ? `<a class="btn primary" style="text-decoration:none; flex:1; text-align:center;" href="tel:${c.phone.replace(/[^0-9+]/g, '')}">Call</a>` : ''}
+      ${c.email ? `<a class="btn ghost" style="text-decoration:none; flex:1; text-align:center; color:var(--ink);" href="https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(c.email)}" target="_blank" rel="noopener">Email</a>` : ''}
+      <button class="btn ghost" style="flex:1;" onclick="alert('Would start a new invoice pre-filled with this customer (demo)'); closeModal();">New invoice</button>
+    </div>
+  `);
 }
 
 function renderCustFilter(val, label) {
@@ -3220,7 +3295,7 @@ function openResearchIdea() {
       <div><div style="font-weight:600; font-size:16px;">${t('add_research_idea')}</div></div>
       <button class="modal-close" onclick="closeModal()">&times;</button>
     </div>
-    <div class="field"><label class="field-lbl">Canal / idea</label><input class="input" placeholder="ej. Spanish-language podcast en SA"></div>
+    <div class="field"><label class="field-lbl">Channel / idea</label><input class="input" placeholder="e.g. Spanish-language podcast in SA"></div>
     <div class="field"><label class="field-lbl">Est. spend</label><input class="input" placeholder="$/month or $/test"></div>
     <div class="field"><label class="field-lbl">Reach</label><input class="input" placeholder="audience / impressions"></div>
     <div class="field"><label class="field-lbl">Next step</label><textarea class="textarea" placeholder="e.g. Call the sponsorship lead..."></textarea></div>
@@ -3437,7 +3512,7 @@ function renderReels() {
                 <div style="width:54px; height:54px; border-radius:6px; background: linear-gradient(135deg, hsl(${i*60},40%,70%) 0%, hsl(${i*60+30},40%,55%) 100%); display:flex; align-items:center; justify-content:center; color:white; font-family:var(--serif); font-size:14px;">${i+1}</div>
               `).join('')}
             </div>
-            <div style="font-size:11px; color:var(--dim); font-family:var(--mono); margin-top:10px;">${REEL_STATE.photos}/8 fotos</div>
+            <div style="font-size:11px; color:var(--dim); font-family:var(--mono); margin-top:10px;">${REEL_STATE.photos}/8 photos</div>
           </div>
         </div>
 
@@ -3452,8 +3527,8 @@ function renderReels() {
 
         <div class="card">
           <h2 style="margin-top:0;">${t('reels_step_script')}</h2>
-          <textarea class="textarea" id="reel-script" placeholder="ej. 'Solo este fin de semana — sin crédito necesario. Llévate este sectional por $50/mes.'" onchange="REEL_STATE.script=this.value;">${REEL_STATE.script || sampleScript(REEL_STATE.theme)}</textarea>
-          <div style="font-size:11px; color:var(--dim); margin-top:6px;">El sistema genera 2 versiones: español e inglés. Voiceover y subtítulos automáticos en ambos idiomas.</div>
+          <textarea class="textarea" id="reel-script" placeholder="e.g. 'This weekend only — no credit needed. Take this sectional home for $50/mo.'" onchange="REEL_STATE.script=this.value;">${REEL_STATE.script || sampleScript(REEL_STATE.theme)}</textarea>
+          <div style="font-size:11px; color:var(--dim); margin-top:6px;">The system generates 2 versions: English and Spanish. Voiceover and captions auto-generated in both languages.</div>
         </div>
 
         <div class="card">
@@ -3468,22 +3543,22 @@ function renderReels() {
       </div>
 
       <div>
-        <div class="card" style="background:#000; color:white; padding:0; overflow:hidden;">
-          <div style="aspect-ratio: 9/16; max-height:480px; background: linear-gradient(180deg, #2a1f15 0%, #1a1410 100%); position:relative; display:flex; flex-direction:column; justify-content:space-between; padding:14px;">
-            <div style="font-family:var(--mono); font-size:9px; color:rgba(255,255,255,0.5); letter-spacing:1.5px; text-transform:uppercase;">PREVIEW · 9:16</div>
+        <div style="display:flex; justify-content:center; margin-bottom:12px;">
+          <div style="width:260px; aspect-ratio: 9/16; background: linear-gradient(180deg, #2a1f15 0%, #1a1410 100%); position:relative; display:flex; flex-direction:column; justify-content:space-between; padding:16px; border-radius:24px; color:white; box-shadow: 0 10px 30px rgba(0,0,0,0.2); border: 4px solid #1a1410;">
+            <div style="font-family:var(--label); font-size:9px; color:rgba(255,255,255,0.5); letter-spacing:1.5px; text-transform:uppercase; font-weight:700;">Preview · 9:16</div>
             <div style="text-align:center;">
-              <div style="background:var(--accent); color:#000; display:inline-block; padding:6px 12px; border-radius:4px; font-family:'Fraunces',serif; font-weight:600; font-size:18px; transform:rotate(-2deg); margin-bottom:14px;">${t('theme_' + REEL_STATE.theme).split('·')[0].trim().toUpperCase()}</div>
-              <div style="font-family:'Fraunces',serif; font-size:32px; font-weight:500; line-height:1.1; margin:14px 0;">Llévate este<br><em style="color:var(--accent);">sectional</em><br>por $50/mes</div>
-              <div style="font-size:12px; color:rgba(255,255,255,0.7); margin-top:8px;">Sin crédito necesario · 210 Discount Furniture</div>
+              <div style="background:var(--accent); color:#000; display:inline-block; padding:5px 10px; border-radius:4px; font-family:'Fraunces',serif; font-weight:600; font-size:14px; transform:rotate(-2deg); margin-bottom:10px;">${t('theme_' + REEL_STATE.theme).split('·')[0].trim().toUpperCase()}</div>
+              <div style="font-family:'Fraunces',serif; font-size:22px; font-weight:500; line-height:1.1; margin:10px 0;">Take this<br><em style="color:var(--accent);">sectional</em><br>home for $50/mo</div>
+              <div style="font-size:10px; color:rgba(255,255,255,0.7); margin-top:6px;">No credit needed · 210 Discount Furniture</div>
             </div>
             <div style="display:flex; justify-content:space-between; align-items:flex-end;">
               <div>
-                <div style="font-family:var(--serif); font-size:14px;">@210discountfurniture</div>
-                <div style="font-size:11px; color:rgba(255,255,255,0.6); font-family:var(--mono);">Mon-Sat 9-7 · 712-4700</div>
+                <div style="font-family:var(--serif); font-size:11px;">@210discountfurniture</div>
+                <div style="font-size:9px; color:rgba(255,255,255,0.6); font-family:var(--mono);">Mon-Sat 9-7 · 712-4700</div>
               </div>
-              <div style="display:flex; flex-direction:column; gap:14px; align-items:center; font-size:18px;">
-                <span style="background:rgba(255,255,255,0.15); padding:8px; border-radius:50%; width:34px; height:34px; display:flex; align-items:center; justify-content:center;">♡</span>
-                <span style="background:rgba(255,255,255,0.15); padding:8px; border-radius:50%; width:34px; height:34px; display:flex; align-items:center; justify-content:center;">↗</span>
+              <div style="display:flex; flex-direction:column; gap:10px; align-items:center; font-size:14px;">
+                <span style="background:rgba(255,255,255,0.15); padding:6px; border-radius:50%; width:28px; height:28px; display:flex; align-items:center; justify-content:center;">♡</span>
+                <span style="background:rgba(255,255,255,0.15); padding:6px; border-radius:50%; width:28px; height:28px; display:flex; align-items:center; justify-content:center;">↗</span>
               </div>
             </div>
           </div>
@@ -3494,7 +3569,7 @@ function renderReels() {
             <span class="card-title">${t('reels_recent')}</span>
           </div>
           ${RECENT_REELS.map(r => `
-            <div class="row">
+            <div class="row" onclick="openReelDetail('${r.id}')" style="cursor:pointer;">
               <div style="flex:1;">
                 <div class="lbl">${r.title}</div>
                 <div class="meta">${r.when} · ${r.plat.map(p => `<span class="plat ${p}">${p.toUpperCase()}</span>`).join(' ')}</div>
@@ -3519,6 +3594,43 @@ function renderReels() {
   const ta = document.getElementById('reel-script');
   if (ta) ta.addEventListener('input', e => REEL_STATE.script = e.target.value);
 }
+function openReelDetail(id) {
+  const r = RECENT_REELS.find(x => x.id === id);
+  if (!r) return;
+  const item = INVENTORY.find(x => x.sku === r.sku);
+  const cpl = (r.views / r.leads).toFixed(0);
+  openModal(`
+    <div class="modal-head">
+      <div>
+        <div style="font-weight:700; font-size:16px;">${r.title}</div>
+        <div style="font-family:var(--label); font-weight:700; font-size:10px; color:var(--dim); margin-top:2px; text-transform:uppercase; letter-spacing:0.6px;">Published ${r.when} · ${r.plat.length} platform${r.plat.length === 1 ? '' : 's'}</div>
+      </div>
+      <button class="modal-close" onclick="closeModal()">&times;</button>
+    </div>
+    <div class="grid-4" style="margin-bottom:14px;">
+      <div class="stat"><div class="stat-num">${r.views.toLocaleString()}</div><div class="stat-lbl">Views</div></div>
+      <div class="stat"><div class="stat-num" style="color:var(--success);">${r.leads}</div><div class="stat-lbl">Leads</div></div>
+      <div class="stat"><div class="stat-num">${cpl}:1</div><div class="stat-lbl">Views per lead</div></div>
+      <div class="stat"><div class="stat-num">${r.plat.length}</div><div class="stat-lbl">Platforms</div></div>
+    </div>
+    ${item ? `
+    <div style="display:flex; gap:12px; padding:12px; background:var(--surface-soft); border-radius:8px; margin-bottom:14px; align-items:center;">
+      <div style="width:48px; height:48px; border-radius:8px; background:${item.color}; color:white; font-family:var(--serif); display:flex; align-items:center; justify-content:center; font-weight:600;">${item.sku.slice(0,3)}</div>
+      <div style="flex:1;">
+        <div style="font-weight:600; font-size:14px;">Featured: ${item.name}</div>
+        <div style="font-family:var(--label); font-weight:600; font-size:11px; color:var(--dim);">${item.sku} · $${item.price.toLocaleString()} · ${item.qty} in stock</div>
+      </div>
+    </div>
+    ` : ''}
+    <div class="row"><span class="lbl">Theme</span><span class="val">${t('theme_' + r.theme)}</span></div>
+    <div class="row"><span class="lbl">Published to</span><span class="val">${r.plat.map(p => `<span class="plat ${p}">${p.toUpperCase()}</span>`).join(' ')}</span></div>
+    <div style="display:flex; gap:8px; margin-top:14px;">
+      <button class="btn primary" style="flex:2;" onclick="alert('Reel re-uses same template + theme — generates fresh copy (demo)'); closeModal();">Duplicate &amp; remix</button>
+      <button class="btn ghost" onclick="closeModal()">Close</button>
+    </div>
+  `);
+}
+
 function sampleScript(theme) {
   const samples = {
     memorial_day: 'Memorial Day Sale — 25% off all sectionals. No credit needed. This weekend only.',
