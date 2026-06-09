@@ -730,7 +730,7 @@ h3 {
   <div class="head-top">
     <img src="210-logo.svg" alt="210 Discount Furniture" class="logo-img" onerror="this.style.display='none'">
     <div>
-      <div class="brand-sub" id="brand-sub" style="margin-top:0;">Tu negocio · una pantalla</div>
+      <div class="brand-sub" id="brand-sub" style="margin-top:0;">Your business · one screen</div>
       <div style="font-family: 'Fraunces', Georgia, serif; font-size: 15px; font-weight: 500; letter-spacing: -0.2px; line-height: 1.1; margin-top: 2px;">Cockpit</div>
     </div>
     <div class="head-spacer"></div>
@@ -3473,6 +3473,10 @@ function boot() {
   renderUserSwitcher();
   renderNav();
   renderView();
+  // Force brand-sub to match the active language at boot (the HTML default is
+  // only the English fallback for the first paint before JS runs).
+  const sub = document.getElementById('brand-sub');
+  if (sub) sub.textContent = t('brand_sub');
 }
 boot();
 
