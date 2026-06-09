@@ -1,7 +1,7 @@
 /* 210 Cockpit service worker
    Cache-first for app shell · network-first for any future /api/* calls
    Bump CACHE_VERSION when the shell changes so users get the new build */
-const CACHE_VERSION = 'cockpit-v5-2026-06-09-clickable';
+const CACHE_VERSION = 'cockpit-v7-2026-06-09-notifications';
 const SHELL = [
   './',
   './index.html',

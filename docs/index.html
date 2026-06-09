@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="210 Cockpit">
 <meta name="theme-color" content="#5d85a5">
-<title>210 Cockpit — Pasha</title>
+<title>210 Cockpit — Paul Nimerovsky</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icons/icon-180.png">
 <link rel="icon" type="image/svg+xml" href="210-logo.svg">
@@ -118,6 +118,46 @@ header {
   color: var(--ink);
   font-weight: 500;
 }
+.notif-toggle {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: var(--success-soft); color: var(--success);
+  border: 0.5px solid var(--success);
+  border-radius: 6px; padding: 5px 9px;
+  font-family: var(--label); font-weight: 700; font-size: 11px;
+  text-transform: uppercase; letter-spacing: 0.5px;
+  cursor: pointer; transition: all 0.15s;
+}
+.notif-toggle.off { background: var(--surface-soft); color: var(--dim); border-color: var(--border); }
+.notif-toggle .notif-bell { font-size: 13px; line-height: 1; }
+.notif-toggle.off .notif-bell { filter: grayscale(1); opacity: 0.55; }
+@media (max-width: 600px) { .notif-toggle .notif-label { display: none; } }
+
+/* In-app message toast */
+.toast-container {
+  position: fixed; bottom: 20px; right: 20px; z-index: 200;
+  display: flex; flex-direction: column; gap: 8px;
+  pointer-events: none;
+}
+.toast {
+  background: var(--surface); border: 0.5px solid var(--border);
+  border-left: 4px solid var(--primary);
+  border-radius: 10px; padding: 12px 14px;
+  box-shadow: 0 8px 24px rgba(20,17,13,0.18);
+  min-width: 280px; max-width: 380px;
+  pointer-events: auto;
+  display: flex; gap: 10px; align-items: flex-start;
+  animation: toast-in 0.3s ease-out;
+}
+@keyframes toast-in { from { transform: translateX(420px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+.toast .toast-bell { font-size: 18px; flex-shrink: 0; animation: bell-wiggle 0.5s ease; }
+@keyframes bell-wiggle { 0%, 100% { transform: rotate(0); } 25% { transform: rotate(-15deg); } 75% { transform: rotate(15deg); } }
+.toast .toast-body { flex: 1; min-width: 0; }
+.toast .toast-title { font-weight: 700; font-size: 13px; line-height: 1.3; margin-bottom: 3px; }
+.toast .toast-meta { font-family: var(--label); font-weight: 700; font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px; color: var(--dim); margin-bottom: 4px; }
+.toast .toast-preview { font-size: 12px; color: var(--dim); line-height: 1.4; }
+.toast .toast-actions { display: flex; gap: 6px; margin-top: 8px; }
+.toast .toast-btn { background: var(--primary); color: white; border: 0; padding: 4px 10px; border-radius: 4px; font-family: var(--label); font-weight: 700; font-size: 10px; text-transform: uppercase; letter-spacing: 0.4px; cursor: pointer; }
+.toast .toast-btn.ghost { background: transparent; color: var(--dim); border: 0.5px solid var(--border); }
 
 /* NAV */
 nav {
@@ -739,6 +779,10 @@ h3 {
       <button id="lang-es" onclick="setLang('es')">ES</button>
       <button id="lang-ru" onclick="setLang('ru')">RU</button>
     </div>
+    <button class="notif-toggle" id="notif-toggle" onclick="toggleNotifications()" title="Notifications ON/OFF">
+      <span class="notif-bell">🔔</span>
+      <span class="notif-label" id="notif-label">ON</span>
+    </button>
     <select class="user-switcher" id="user-switcher" onchange="switchUser(this.value)"></select>
   </div>
   <nav id="nav"></nav>
@@ -760,6 +804,9 @@ h3 {
 <div class="modal-back" id="modal" onclick="if(event.target===this)closeModal()">
   <div class="modal" id="modal-body"></div>
 </div>
+
+<!-- In-app message-arrival toasts -->
+<div class="toast-container" id="toasts"></div>
 
 <!-- Print-only receipt mount point. Populated by printReceipt() then window.print() -->
 <div class="print-receipt" id="print-receipt"></div>
@@ -1077,7 +1124,7 @@ const I18N = {
     invoice_finance: 'Financed',
     invoice_pending: 'Pending',
     scan_modal_title: 'Scan paper invoice',
-    scan_modal_body: 'In the live version this opens the phone camera. The system auto-extracts: customer name, line items, total, date. Pasha or the salesperson confirms or edits the fields before saving.',
+    scan_modal_body: 'In the live version this opens the phone camera. The system auto-extracts: customer name, line items, total, date. Paul or the salesperson confirms or edits the fields before saving.',
     scan_simulate: 'Simulate scan',
     new_invoice_title: 'New digital invoice',
     add_item: 'Add line item',
@@ -1153,7 +1200,7 @@ const I18N = {
     in_stock: 'In stock',
     composing_to: 'Composing to',
     review_response: 'Respond',
-    flag_pasha: 'Flag for Pasha',
+    flag_pasha: 'Flag for Paul',
     last_synced: 'Synced',
     serious_lead: 'Serious lead',
     spam: 'Spam',
@@ -1219,7 +1266,7 @@ const I18N = {
     needs_reply: 'Needs reply',
     you_replied: 'You replied',
     bot_replied: 'AI replied',
-    awaiting_pasha: 'Awaiting Pasha',
+    awaiting_pasha: 'Awaiting Paul',
     follow_up_due: 'Follow-up due',
     sale_closed_by: 'Closed by'
   },
@@ -1454,7 +1501,7 @@ function t(k) { return I18N[LANG][k] || I18N.en[k] || k; }
 /* -------- MOCK DATA -------- */
 
 const USERS = [
-  { id: 'pasha', name: 'Pasha', role: 'owner', avatar: 'P', perms: ['inbox_all','inventory_read','inventory_write','customers','customers_email','ads','team','money','reviews'] },
+  { id: 'pasha', name: 'Paul Nimerovsky', role: 'owner', avatar: 'P', perms: ['inbox_all','inventory_read','inventory_write','customers','customers_email','ads','team','money','reviews'] },
   { id: 'ivan', name: 'Ivan', role: 'admin', avatar: 'I', perms: ['inbox_all','inventory_read','inventory_write','customers','customers_email','ads','team','reviews'] },
   { id: 'christian', name: 'Christian', role: 'sales', avatar: 'C', perms: ['inbox_assigned','inventory_read','customers','reviews'] },
   { id: 'maria', name: 'María', role: 'sales', avatar: 'M', perms: ['inbox_assigned','inventory_read','customers','reviews'] },
@@ -1636,6 +1683,25 @@ const TODAY_APPTS = [
 
 const BANK = { balance: 84320, pending_payments: 12450, scheduled_outflow_30d: 28900 };
 
+// Per-account message tally for yesterday — what Paul wants to see on Morning
+// so he can tell which FB / IG / TikTok / Email accounts are pulling weight.
+// Click a row to drill into inbox filtered to that account.
+const ACCOUNT_MSGS_YESTERDAY = [
+  { account_id: 'fb-main',    count: 14, unread: 2, serious: 5, spam: 1 },
+  { account_id: 'fb-matt',    count: 6,  unread: 1, serious: 3, spam: 0 },
+  { account_id: 'fb-spanish', count: 11, unread: 3, serious: 4, spam: 1 },
+  { account_id: 'fb-outlet',  count: 3,  unread: 0, serious: 1, spam: 0 },
+  { account_id: 'fb-mkt',     count: 18, unread: 5, serious: 2, spam: 4 },
+  { account_id: 'ig-main',    count: 9,  unread: 2, serious: 3, spam: 0 },
+  { account_id: 'tt-main',    count: 7,  unread: 1, serious: 1, spam: 0 },
+  { account_id: 'tt-es',      count: 4,  unread: 0, serious: 2, spam: 0 },
+  { account_id: 'ou-main',    count: 12, unread: 3, serious: 5, spam: 0 },
+  { account_id: 'email-biz',  count: 3,  unread: 1, serious: 3, spam: 0 },
+  { account_id: 'email-gmail',count: 5,  unread: 1, serious: 2, spam: 1 },
+  { account_id: 'gb-main',    count: 2,  unread: 1, serious: 1, spam: 0 },
+  { account_id: 'wa-main',    count: 4,  unread: 1, serious: 3, spam: 0 }
+];
+
 /* -------- STATE -------- */
 let CURRENT_USER = USERS[0]; // default Pasha
 let CURRENT_VIEW = 'morning';
@@ -1719,9 +1785,14 @@ function renderMorning() {
 
   const html = `
     <div class="greet-strip">
-      <div class="greet-name">${greet}, <em>${CURRENT_USER.name}</em></div>
-      <div class="greet-date">${dateStr}</div>
-      <div class="stat-row">
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:14px; flex-wrap:wrap;">
+        <div>
+          <div class="greet-name">${greet}, <em>${CURRENT_USER.name.split(' ')[0]}</em></div>
+          <div class="greet-date">${dateStr}</div>
+        </div>
+        <button class="btn" style="background:rgba(255,255,255,0.15); color:white; border:1px solid rgba(255,255,255,0.3);" onclick="openMorningReport()">Download yesterday's report</button>
+      </div>
+      <div class="stat-row" style="margin-top:14px;">
         <div class="stat-cell">
           <div class="n">$${YESTERDAY_REPORT.total_sales.toLocaleString()}</div>
           <div class="l">${t('sales_yest')}</div>
@@ -1743,6 +1814,28 @@ function renderMorning() {
 
     <div class="grid-2-uneven">
       <div>
+        <div class="card">
+          <div class="card-head">
+            <span class="card-title">Messages yesterday by account</span>
+            <span class="card-extra">${ACCOUNT_MSGS_YESTERDAY.reduce((s, a) => s + a.count, 0)} total · ${ACCOUNT_MSGS_YESTERDAY.reduce((s, a) => s + a.unread, 0)} still unread</span>
+          </div>
+          ${ACCOUNT_MSGS_YESTERDAY.map(a => {
+            const acct = ACCOUNTS.find(x => x.id === a.account_id);
+            if (!acct) return '';
+            return `
+              <div class="row" style="cursor:pointer;" onclick="setView('inbox'); setTimeout(() => { INBOX_FILTER.account='${a.account_id}'; renderInbox(); }, 50);">
+                <div style="flex:1; display:flex; align-items:center; gap:10px;">
+                  <span class="plat ${acct.platform}">${acct.platform.toUpperCase()}</span>
+                  <div>
+                    <div class="lbl">${acct.label}</div>
+                    <div class="meta">${a.count} message${a.count === 1 ? '' : 's'} · ${a.serious} serious · ${a.spam} spam${a.unread > 0 ? ` · <b style="color:var(--primary);">${a.unread} still unread</b>` : ''}</div>
+                  </div>
+                </div>
+                <div class="val">${a.count}</div>
+              </div>`;
+          }).join('')}
+        </div>
+
         <div class="card">
           <div class="card-head">
             <span class="card-title">${t('team_perf')}</span>
@@ -3012,7 +3105,7 @@ function openNewCampaign() {
 
 Thanks for being a 210 Discount Furniture customer.
 
-— Pasha</textarea>
+— Paul</textarea>
     </div>
     <div style="display:flex; gap:8px;">
       <button class="btn primary" onclick="alert('Campaign queued (demo)'); closeModal();">${t('send')}</button>
@@ -3094,6 +3187,202 @@ function renderAds() {
     <button class="btn ghost full" style="margin-top:12px;" onclick="openResearchIdea()">${t('add_research_idea')}</button>
   `;
   document.getElementById('view-ads').innerHTML = html;
+}
+
+/* MORNING REPORT — printable / saveable HTML report of yesterday.
+   Opens in a new tab as a fully self-contained document Paul can save as
+   PDF (Cmd-P → Save as PDF) or send to anyone. Covers: top stats, messages
+   per account, where customers were from (SA vs out-of-area), team perf,
+   reviews, low-stock alerts, ad spend, top reels. */
+function openMorningReport() {
+  const totalMsgs = ACCOUNT_MSGS_YESTERDAY.reduce((s, a) => s + a.count, 0);
+  const totalSerious = ACCOUNT_MSGS_YESTERDAY.reduce((s, a) => s + a.serious, 0);
+  const totalSpam = ACCOUNT_MSGS_YESTERDAY.reduce((s, a) => s + a.spam, 0);
+  const totalUnread = ACCOUNT_MSGS_YESTERDAY.reduce((s, a) => s + a.unread, 0);
+  // Where customers were from (current open threads as a proxy)
+  const saCount = THREADS.filter(t => t.loc === 'sa').length;
+  const outCount = THREADS.filter(t => t.loc === 'out').length;
+  const reviews = THREADS.filter(t => t.intent === 'review_good' || t.intent === 'review_bad');
+  const lowStock = INVENTORY.filter(i => i.status === 'lowstock');
+  const topReels = RECENT_REELS.slice().sort((a, b) => b.leads - a.leads).slice(0, 3);
+  const yesterday = new Date(TODAY); yesterday.setDate(yesterday.getDate() - 1);
+  const yDateStr = yesterday.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+
+  const html = `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>210 Cockpit · Morning Report · ${yDateStr}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&family=Fraunces:ital,wght@0,400;0,500;0,600;1,400&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  @page { size: letter; margin: 0.5in; }
+  * { box-sizing: border-box; }
+  body { font-family: "Nunito", -apple-system, sans-serif; color: #14130d; background: #fafaf6; margin: 0; padding: 24px 32px; font-size: 12pt; line-height: 1.5; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .head { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid #14130d; padding-bottom: 10pt; margin-bottom: 14pt; }
+  .brand { font-family: "Fraunces", serif; font-size: 24pt; font-weight: 500; line-height: 1.1; }
+  .brand b { color: #5d85a5; font-weight: 700; }
+  .brand-sub { font-family: "Nunito", sans-serif; font-size: 10pt; font-weight: 700; text-transform: uppercase; letter-spacing: 0.12em; color: #5a564a; margin-top: 4pt; }
+  .date { font-family: "Nunito", sans-serif; font-size: 11pt; font-weight: 700; text-align: right; color: #5a564a; }
+  .date b { display: block; font-family: "Fraunces", serif; font-weight: 500; font-size: 16pt; color: #14130d; margin-bottom: 2pt; }
+  h2 { font-family: "Nunito", sans-serif; font-weight: 800; font-size: 10pt; text-transform: uppercase; letter-spacing: 0.1em; color: #5a564a; margin: 18pt 0 8pt 0; padding-bottom: 4pt; border-bottom: 0.5px solid #c5bfa9; }
+  .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10pt; margin-bottom: 14pt; }
+  .stat { background: #fff; border: 0.5px solid #c5bfa9; border-radius: 8pt; padding: 10pt 12pt; }
+  .stat .n { font-family: "JetBrains Mono", monospace; font-size: 18pt; font-weight: 700; line-height: 1; color: #14130d; }
+  .stat .l { font-family: "Nunito", sans-serif; font-weight: 700; font-size: 9pt; color: #5a564a; text-transform: uppercase; letter-spacing: 0.06em; margin-top: 4pt; }
+  table { width: 100%; border-collapse: collapse; font-size: 10pt; margin-bottom: 10pt; }
+  th { background: #f0ecdf; padding: 5pt 8pt; text-align: left; font-family: "Nunito", sans-serif; font-weight: 800; font-size: 9pt; text-transform: uppercase; letter-spacing: 0.06em; color: #5a564a; }
+  td { padding: 5pt 8pt; border-bottom: 0.5px solid #ece8d9; }
+  td.r, th.r { text-align: right; }
+  .badge { display: inline-block; padding: 1pt 6pt; border-radius: 8pt; font-family: "Nunito", sans-serif; font-weight: 800; font-size: 8pt; text-transform: uppercase; letter-spacing: 0.04em; background: #f0ecdf; color: #5a564a; }
+  .badge.sa { background: #e8f0e3; color: #3d6b2e; }
+  .badge.out { background: #fae6dc; color: #a04020; }
+  .badge.warn { background: #fbf3dc; color: #b8860b; }
+  .badge.danger { background: #fbe8e4; color: #b8463a; }
+  .review { padding: 10pt 12pt; background: #fff; border: 0.5px solid #c5bfa9; border-radius: 8pt; margin-bottom: 6pt; }
+  .review.bad { border-color: #b8463a; background: linear-gradient(0deg, #fff, #fbe8e4 80%); }
+  .stars { font-family: "JetBrains Mono", monospace; font-size: 12pt; letter-spacing: 2pt; color: #b8860b; margin-bottom: 4pt; }
+  .stars.low { color: #b8463a; }
+  .review-author { font-weight: 700; }
+  .review-text { font-size: 11pt; line-height: 1.5; margin: 4pt 0; }
+  .row-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 12pt; }
+  .small { font-size: 9pt; color: #5a564a; }
+  .print-btn { background: #5d85a5; color: white; padding: 8pt 16pt; border: 0; border-radius: 6pt; font-family: "Nunito", sans-serif; font-weight: 700; cursor: pointer; font-size: 11pt; }
+  .actions { text-align: right; margin-bottom: 10pt; }
+  @media print { .actions { display: none; } body { padding: 0; background: white; } }
+</style>
+</head>
+<body>
+  <div class="actions">
+    <button class="print-btn" onclick="window.print()">Print / Save as PDF</button>
+  </div>
+  <div class="head">
+    <div>
+      <div class="brand">210 <b>Discount</b> Furniture</div>
+      <div class="brand-sub">Morning Report · prepared for Paul Nimerovsky</div>
+    </div>
+    <div class="date"><b>${yDateStr}</b>Yesterday's summary</div>
+  </div>
+
+  <h2>Top numbers</h2>
+  <div class="stats">
+    <div class="stat"><div class="n">$${YESTERDAY_REPORT.total_sales.toLocaleString()}</div><div class="l">Sales gross</div></div>
+    <div class="stat"><div class="n">${YESTERDAY_REPORT.total_sales_count}</div><div class="l">Sales closed</div></div>
+    <div class="stat"><div class="n">${totalMsgs}</div><div class="l">Messages received</div></div>
+    <div class="stat"><div class="n">${totalSerious}</div><div class="l">Serious leads</div></div>
+  </div>
+  <div class="stats">
+    <div class="stat"><div class="n">${YESTERDAY_REPORT.finance_apps.approved}</div><div class="l">Finance approved</div></div>
+    <div class="stat"><div class="n">${YESTERDAY_REPORT.finance_apps.declined}</div><div class="l">Finance declined</div></div>
+    <div class="stat"><div class="n">$${YESTERDAY_REPORT.ad_spend.toLocaleString()}</div><div class="l">Ad spend</div></div>
+    <div class="stat"><div class="n">${YESTERDAY_REPORT.new_reviews_good + YESTERDAY_REPORT.new_reviews_bad}</div><div class="l">New reviews</div></div>
+  </div>
+
+  <h2>Messages by account · who is producing</h2>
+  <table>
+    <thead><tr><th>Account</th><th>Platform</th><th class="r">Messages</th><th class="r">Serious</th><th class="r">Spam</th><th class="r">Still unread</th></tr></thead>
+    <tbody>
+      ${ACCOUNT_MSGS_YESTERDAY.map(a => {
+        const acct = ACCOUNTS.find(x => x.id === a.account_id);
+        if (!acct) return '';
+        return `<tr>
+          <td><b>${acct.label}</b></td>
+          <td><span class="badge">${acct.platform.toUpperCase()}</span></td>
+          <td class="r">${a.count}</td>
+          <td class="r">${a.serious}</td>
+          <td class="r">${a.spam || '—'}</td>
+          <td class="r">${a.unread > 0 ? `<b style="color:#b8463a;">${a.unread}</b>` : '0'}</td>
+        </tr>`;
+      }).join('')}
+      <tr style="border-top: 2px solid #14130d; font-weight:700;">
+        <td colspan="2">TOTAL</td>
+        <td class="r">${totalMsgs}</td>
+        <td class="r">${totalSerious}</td>
+        <td class="r">${totalSpam}</td>
+        <td class="r">${totalUnread}</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="row-2col">
+    <div>
+      <h2>Where customers were from</h2>
+      <table>
+        <thead><tr><th>Location</th><th class="r">Threads</th><th class="r">Share</th></tr></thead>
+        <tbody>
+          <tr><td><span class="badge sa">San Antonio</span></td><td class="r">${saCount}</td><td class="r">${saCount + outCount > 0 ? Math.round((saCount / (saCount + outCount)) * 100) : 0}%</td></tr>
+          <tr><td><span class="badge out">Out-of-area</span></td><td class="r">${outCount}</td><td class="r">${saCount + outCount > 0 ? Math.round((outCount / (saCount + outCount)) * 100) : 0}%</td></tr>
+        </tbody>
+      </table>
+      <p class="small">Out-of-area customers typically came from Schertz, Boerne, New Braunfels, Helotes — within delivery range but higher fee. Worth tracking whether out-of-area pays back on the $49 delivery fee.</p>
+    </div>
+    <div>
+      <h2>Team performance</h2>
+      <table>
+        <thead><tr><th>Rep</th><th class="r">Msgs</th><th class="r">Closed</th><th class="r">Gross</th></tr></thead>
+        <tbody>
+          ${YESTERDAY_REPORT.team.filter(s => s.msgs > 0 || s.closed > 0).map(s => {
+            const u = USERS.find(u => u.id === s.id);
+            return `<tr><td><b>${u.name}</b></td><td class="r">${s.msgs}</td><td class="r">${s.closed}</td><td class="r">${s.closed > 0 ? '$' + s.gross.toLocaleString() : '—'}</td></tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  ${reviews.length > 0 ? `
+  <h2>New reviews requiring attention</h2>
+  ${reviews.map(r => `
+    <div class="review ${r.intent === 'review_bad' ? 'bad' : ''}">
+      <div class="stars ${r.intent === 'review_bad' ? 'low' : ''}">${r.intent === 'review_bad' ? '★ ☆ ☆ ☆ ☆' : '★ ★ ★ ★ ★'}</div>
+      <div class="review-author">${r.customer} · ${r.account}</div>
+      <div class="review-text">${r.preview}</div>
+      ${r.intent === 'review_bad' ? `<div class="small" style="color:#b8463a; font-weight:700;">→ Action: Paul should call this customer personally before responding publicly.</div>` : ''}
+    </div>
+  `).join('')}
+  ` : ''}
+
+  ${lowStock.length > 0 ? `
+  <h2>Low stock alerts</h2>
+  <table>
+    <thead><tr><th>SKU</th><th>Item</th><th class="r">Qty left</th><th class="r">Retail</th></tr></thead>
+    <tbody>
+      ${lowStock.map(i => `<tr><td><b>${i.sku}</b></td><td>${i.name}</td><td class="r"><b style="color:#b8860b;">${i.qty}</b></td><td class="r">$${i.price.toLocaleString()}</td></tr>`).join('')}
+    </tbody>
+  </table>
+  ` : ''}
+
+  <h2>Top-performing reels (lifetime, last published 14 days)</h2>
+  <table>
+    <thead><tr><th>Reel</th><th class="r">Views</th><th class="r">Leads</th><th class="r">Views/lead</th></tr></thead>
+    <tbody>
+      ${topReels.map(r => `<tr><td>${r.title}</td><td class="r">${r.views.toLocaleString()}</td><td class="r">${r.leads}</td><td class="r">${(r.views / r.leads).toFixed(0)}:1</td></tr>`).join('')}
+    </tbody>
+  </table>
+
+  <h2>Today's calendar</h2>
+  <table>
+    <thead><tr><th>Time</th><th>What</th></tr></thead>
+    <tbody>
+      ${TODAY_DELIVERIES.map(d => `<tr><td><b>${d.time}</b></td><td>Delivery · ${d.customer} · ${d.addr} · ${d.items}</td></tr>`).join('')}
+      ${TODAY_APPTS.map(a => `<tr><td><b>${a.time}</b></td><td>${a.what}</td></tr>`).join('')}
+    </tbody>
+  </table>
+
+  <div style="margin-top:30pt; padding-top:14pt; border-top:0.5px solid #c5bfa9; font-size:9pt; color:#5a564a; text-align:center;">
+    Auto-generated by 210 Cockpit · ${new Date().toLocaleString('en-US')} · For Paul Nimerovsky's eyes only
+  </div>
+</body>
+</html>`;
+
+  const win = window.open('', '_blank');
+  if (!win) {
+    alert('Pop-up blocked. Allow pop-ups for this site, then try again.');
+    return;
+  }
+  win.document.write(html);
+  win.document.close();
 }
 
 /* BUDGET REPORT — full financial breakdown across all accounts + team perf */
@@ -3316,7 +3605,7 @@ const SCOUT_OPPS = [
     cost: '$0-300/month (event sponsorship) or $0 (booth at MWR new-arrival fairs)',
     contact: { name: 'JBSA MWR Marketing Office', phone: '(210) 671-2619', email: 'jbsa.mwr.marketing@us.af.mil', addr: '1701 Kenly Ave, JBSA-Randolph TX 78150' },
     why: 'Military families relocate every 2-4 years. They need furniture fast, on a fixed budget, and many qualify for special financing through Snap or Acima — exactly 210\'s wheelhouse. MWR partnerships put 210 directly in front of the newcomer briefing.',
-    script: 'Subject: Furniture partnership inquiry — 210 Discount Furniture\n\nHello,\n\nMy name is Pasha and I own 210 Discount Furniture at 10203 Kotzebue St, just a few miles from Lackland. We work with a lot of military families on PCS moves and I would like to explore a formal partnership with MWR — whether that\'s a booth at the newcomer fair, a sponsored promo in the MWR newsletter, or a referral discount for service members.\n\nWould you have 15 minutes for a call this week? I\'m flexible on your schedule.\n\nThank you for your time and your service.\n\nPasha · 210 Discount Furniture\n(210) 712-4700'
+    script: 'Subject: Furniture partnership inquiry — 210 Discount Furniture\n\nHello,\n\nMy name is Paul Nimerovsky and I own 210 Discount Furniture at 10203 Kotzebue St, just a few miles from Lackland. We work with a lot of military families on PCS moves and I would like to explore a formal partnership with MWR — whether that\'s a booth at the newcomer fair, a sponsored promo in the MWR newsletter, or a referral discount for service members.\n\nWould you have 15 minutes for a call this week? I\'m flexible on your schedule.\n\nThank you for your time and your service.\n\nPasha · 210 Discount Furniture\n(210) 712-4700'
   },
   {
     id: 's2', cat: 'radio', score: 'high',
@@ -3325,7 +3614,7 @@ const SCOUT_OPPS = [
     audience: '~140,000 weekly listeners SA metro · 73% Hispanic · median age 35-54 · 62% homeowners or recent movers',
     cost: '$800-1,500/month for 20-30 sec spots, 12-18 per week in morning drive slot',
     contact: { name: 'iHeartMedia San Antonio Sales', phone: '(210) 829-1075', email: 'sanantoniosales@iheartmedia.com', addr: '6222 W IH-10, San Antonio TX 78201' },
-    why: 'Pasha\'s primary customer is Spanish-speaking, 30-50, working class. Tejano 107.5 is the dominant Spanish-language station in SA. A 30-sec spot in morning drive reaches the exact buyer demographic during their commute to work — when furniture decisions get made (paycheck just landed).',
+    why: 'Paul\'s primary customer is Spanish-speaking, 30-50, working class. Tejano 107.5 is the dominant Spanish-language station in SA. A 30-sec spot in morning drive reaches the exact buyer demographic during their commute to work — when furniture decisions get made (paycheck just landed).',
     script: 'Subject: Media kit request — Tejano 107.5 morning drive\n\nHello,\n\nI own 210 Discount Furniture in San Antonio and we want to test a Spanish-language radio campaign starting in July. Can you send me the media kit for Tejano 107.5, specifically morning drive pricing and reach data?\n\nWe\'re looking at a 30-day pilot with a clear measurable goal (in-store visits with a unique promo code), so I\'d also love to know what tracking options you support.\n\nThank you,\n\nPasha · 210 Discount Furniture\n(210) 712-4700 · pasha@210discountfurniture.com'
   },
   {
@@ -3336,7 +3625,7 @@ const SCOUT_OPPS = [
     cost: '$50 referral fee per closed sale + 1-page collateral · ~$200 one-time for printed flyers per office',
     contact: { name: 'Top 3 to start: The Heights at Stone Oak · Cumberland on Bandera · Camden Spring Creek', phone: 'Property management direct numbers via Apartments.com', email: 'leasing@thencompanyname.com (pattern)', addr: 'Various ZIPs 78232, 78231, 78230' },
     why: 'New apartment tenants spend $1,500-$4,000 on furniture in the first 60 days. The leasing office is the highest-trust pre-purchase touch they have. A $50 referral fee is trivial against the LTV.',
-    script: 'Subject: Furniture referral partnership for [Property Name] residents\n\nHi,\n\nMy name is Pasha and I own 210 Discount Furniture, about 4 miles from your property. I\'d like to propose a referral arrangement: I provide your leasing team with a 1-page sheet to hand to new tenants, and I pay your office $50 for every signed lease that ends up buying from us (tracked by a unique promo code).\n\nNo cost to your office, your tenants get a discount on their first purchase, and you have a turnkey "first 60 days" furniture solution to offer.\n\nCan we meet for 15 minutes this week? I can come to your office.\n\nThank you,\n\nPasha · 210 Discount Furniture\n(210) 712-4700'
+    script: 'Subject: Furniture referral partnership for [Property Name] residents\n\nHi,\n\nMy name is Paul Nimerovsky and I own 210 Discount Furniture, about 4 miles from your property. I\'d like to propose a referral arrangement: I provide your leasing team with a 1-page sheet to hand to new tenants, and I pay your office $50 for every signed lease that ends up buying from us (tracked by a unique promo code).\n\nNo cost to your office, your tenants get a discount on their first purchase, and you have a turnkey "first 60 days" furniture solution to offer.\n\nCan we meet for 15 minutes this week? I can come to your office.\n\nThank you,\n\nPasha · 210 Discount Furniture\n(210) 712-4700'
   },
   {
     id: 's4', cat: 'outdoor', score: 'high',
@@ -3345,7 +3634,7 @@ const SCOUT_OPPS = [
     audience: '~14,200 occupied households across both ZIPs · 81% Hispanic · 67% own or rent SFH (furniture buyers, not apartment) · median HH income $42K (financing-aligned)',
     cost: '~$0.04/door = ~$570 for the full 14,200 drop · 1-time test, no recurring',
     contact: { name: 'USPS Every Door Direct Mail (self-serve)', phone: '1-800-238-3150', email: 'eddm.tools.usps.com (self-serve portal)', addr: 'Online portal — no rep contact needed' },
-    why: 'Direct mail is having a quiet comeback because email and social are saturated. EDDM lets you test a single neighborhood for under $600 with full address-level data on opens/visits (via a unique promo code). The 78211 and 78224 ZIPs map directly to Pasha\'s walk-in customer demographic per the past-customer database.',
+    why: 'Direct mail is having a quiet comeback because email and social are saturated. EDDM lets you test a single neighborhood for under $600 with full address-level data on opens/visits (via a unique promo code). The 78211 and 78224 ZIPs map directly to Paul\'s walk-in customer demographic per the past-customer database.',
     script: 'No outreach needed — this is self-serve. Action steps:\n\n1. Design a 1-page postcard featuring the no-credit financing message + a unique promo code\n2. Go to eddm.usps.com, enter ZIPs 78211 and 78224, filter to residential addresses\n3. Upload the design, pay ~$570, schedule the drop\n4. Track in-store redemptions of the promo code over 30 days\n5. If ROAS > 3x, expand to 78207, 78214, 78226 next month'
   },
   {
@@ -3356,7 +3645,7 @@ const SCOUT_OPPS = [
     cost: '$200/month for a 1/4 page bulletin ad · 12-month minimum',
     contact: { name: 'Parish Office · Fr. Joseph Aguilar', phone: '(210) 226-1308', email: 'parish.office@sastanthonycatholic.org', addr: '102 Lavaca St, San Antonio TX 78210' },
     why: 'Hispanic Catholic community trust is one of the highest-leverage signals in SA. Church bulletin ads convert at 4-7x vs paid social in this demo. A 1-line "as advertised in the parish bulletin" on the in-store collateral closes the loop.',
-    script: 'Subject: Bulletin sponsorship inquiry from 210 Discount Furniture\n\nHello Father,\n\nMy name is Pasha and I own 210 Discount Furniture. We serve many families from your parish and I would like to support the parish through a bulletin sponsorship.\n\nCould you let me know the rate sheet for monthly placement, and whether 12-month commitments are available?\n\nThank you for your time,\n\nPasha · 210 Discount Furniture\n(210) 712-4700'
+    script: 'Subject: Bulletin sponsorship inquiry from 210 Discount Furniture\n\nHello Father,\n\nMy name is Paul Nimerovsky and I own 210 Discount Furniture. We serve many families from your parish and I would like to support the parish through a bulletin sponsorship.\n\nCould you let me know the rate sheet for monthly placement, and whether 12-month commitments are available?\n\nThank you for your time,\n\nPasha · 210 Discount Furniture\n(210) 712-4700'
   },
   {
     id: 's6', cat: 'digital', score: 'med',
@@ -3376,7 +3665,7 @@ const SCOUT_OPPS = [
     cost: '$0 if accepted as a vendor at the newcomer briefing · cost is staff time (4hr/month + collateral)',
     contact: { name: 'Fort Sam Houston Welcome Center', phone: '(210) 221-2256', email: 'jbsa.fsh.welcome@us.army.mil', addr: '2748 Worth Rd, JBSA-Fort Sam Houston TX 78234' },
     why: 'Same logic as JBSA Lackland but Fort Sam has more medical-training pipeline = constant churn = consistent new-furniture demand. Two military advertising plays in parallel hedges the bet.',
-    script: 'Subject: Vendor inquiry — newcomer briefing\n\nHello,\n\nMy name is Pasha and I own 210 Discount Furniture in San Antonio. We work with a lot of newly-arrived service members and would like to apply to be a vendor at your monthly newcomer briefing.\n\nWho should I speak with about the application process, and is there a fee or qualification standard?\n\nThank you for your service and for your time.\n\nPasha · 210 Discount Furniture\n(210) 712-4700'
+    script: 'Subject: Vendor inquiry — newcomer briefing\n\nHello,\n\nMy name is Paul Nimerovsky and I own 210 Discount Furniture in San Antonio. We work with a lot of newly-arrived service members and would like to apply to be a vendor at your monthly newcomer briefing.\n\nWho should I speak with about the application process, and is there a fee or qualification standard?\n\nThank you for your service and for your time.\n\nPasha · 210 Discount Furniture\n(210) 712-4700'
   },
   {
     id: 's8', cat: 'digital', score: 'low',
@@ -3490,7 +3779,7 @@ function scoutGmail(id) {
    ============================================================ */
 const REEL_THEMES = ['memorial_day','july4','summer','back_school','labor_day','blackfri','xmas','no_credit','tx_pride','mothers','clearance','new_arrival'];
 const RECENT_REELS = [
-  { id: 'r1', sku: 'SOFA-0443', theme: 'no_credit', title: 'Bryant Sectional · sin crédito hasta $5000', when: '2 days ago', views: 4820, leads: 14, plat: ['fb','ig','tt'] },
+  { id: 'r1', sku: 'SOFA-0443', theme: 'no_credit', title: 'Bryant Sectional · no credit up to $5000', when: '2 days ago', views: 4820, leads: 14, plat: ['fb','ig','tt'] },
   { id: 'r2', sku: 'MATT-K-PT', theme: 'memorial_day', title: 'King Pillow-Top · Memorial Day 25% off', when: '6 days ago', views: 12300, leads: 38, plat: ['fb','ig','tt'] },
   { id: 'r3', sku: 'BED-0427', theme: 'new_arrival', title: 'Just arrived · Dresser & Mirror Set', when: '11 days ago', views: 2140, leads: 5, plat: ['fb','ig'] }
 ];
@@ -3636,12 +3925,12 @@ function sampleScript(theme) {
     memorial_day: 'Memorial Day Sale — 25% off all sectionals. No credit needed. This weekend only.',
     july4: 'Stars, stripes, savings. 4th of July blowout — financing as low as $50/mo.',
     summer: 'No payments till August. Brand new sectionals just arrived. Come pick yours up.',
-    no_credit: 'Sin crédito necesario · hasta $5,000 financiados. Llévate hoy lo que necesitas para tu casa.',
+    no_credit: 'No credit needed · finance up to $5,000. Take home what your family needs today.',
     tx_pride: 'Made for Texas families. Locally owned, locally delivered. Stop by 210 Discount Furniture today.',
     new_arrival: 'Just landed at the warehouse — brand new bedroom sets. First come, first served.',
     clearance: 'Floor model clearance — everything must go. Up to 60% off marked prices.'
   };
-  return samples[theme] || 'Llama hoy al (210) 712-4700 o ven a vernos · Lun-Sáb 9-7 · Dom 10-6';
+  return samples[theme] || 'Call (210) 712-4700 today or stop by · Mon-Sat 9-7 · Sun 10-6';
 }
 
 /* ============================================================
@@ -3679,8 +3968,8 @@ function renderTeam() {
     `).join('')}
 
     <div class="card" style="background:var(--surface-soft); border-style:dashed;">
-      <div style="font-family:var(--mono); font-size:10px; text-transform:uppercase; letter-spacing:1.5px; color:var(--dim); margin-bottom:6px;">¿Cómo funciona?</div>
-      <div style="font-size:13px; line-height:1.5;">El propietario (Pasha) puede ajustar permisos de cualquier usuario. El admin (Ivan) puede ajustar a todos excepto al propietario. Los demás no pueden ver esta pantalla. Cada permiso controla qué módulos puede ver y qué acciones puede hacer.</div>
+      <div style="font-family:var(--label); font-weight:700; font-size:11px; text-transform:uppercase; letter-spacing:1px; color:var(--dim); margin-bottom:6px;">How this works</div>
+      <div style="font-size:13px; line-height:1.5;">The owner (Paul) can adjust permissions for any user. The admin (Ivan) can adjust everyone except the owner. Everyone else can't see this screen. Each permission controls which modules a user can view and which actions they can take.</div>
     </div>
   `;
   document.getElementById('view-team').innerHTML = html;
@@ -3718,6 +4007,100 @@ function formatDate(iso) {
   }
 }
 
+/* -------- NOTIFICATIONS --------
+   Per-user ON/OFF toggle (persisted in localStorage). When ON the cockpit
+   shows in-app toasts for every new message, fires a browser Notification
+   if permission granted, and vibrates the device on supported mobile.
+   When OFF (e.g. team member is off-shift) — total silence. */
+const NOTIFY_KEY_PREFIX = 'cockpit.notify.';
+function notifyIsOn() {
+  const v = localStorage.getItem(NOTIFY_KEY_PREFIX + CURRENT_USER.id);
+  return v === null ? true : v === '1';  // default ON
+}
+function setNotifyState(on) {
+  localStorage.setItem(NOTIFY_KEY_PREFIX + CURRENT_USER.id, on ? '1' : '0');
+  paintNotifyButton();
+}
+function paintNotifyButton() {
+  const btn = document.getElementById('notif-toggle');
+  const lbl = document.getElementById('notif-label');
+  if (!btn) return;
+  const on = notifyIsOn();
+  btn.classList.toggle('off', !on);
+  if (lbl) lbl.textContent = on ? 'ON' : 'OFF';
+  btn.title = on ? 'Notifications ON · click to mute when you leave work' : 'Notifications OFF · click to turn back on';
+}
+async function toggleNotifications() {
+  const on = !notifyIsOn();
+  setNotifyState(on);
+  if (on) {
+    // Request browser notification permission once (so it can fire when the tab is in background)
+    if ('Notification' in window && Notification.permission === 'default') {
+      try { await Notification.requestPermission(); } catch (e) {}
+    }
+    showToast({ kind: 'system', title: 'Notifications turned ON', preview: "You'll be pinged for every incoming message across all 13 accounts. Tap the bell again to mute when you leave work." });
+    // Fire a demo notification after 4 seconds to show what it looks like
+    setTimeout(() => simulateIncomingMessage(), 4000);
+  } else {
+    showToast({ kind: 'system', title: 'Notifications turned OFF', preview: 'Total silence. Re-enable from the bell icon anytime.' });
+  }
+}
+function showToast(opts) {
+  // opts: { kind: 'system'|'message', title, preview, threadId?, account?, customer? }
+  const container = document.getElementById('toasts');
+  if (!container) return;
+  const el = document.createElement('div');
+  el.className = 'toast';
+  el.innerHTML = `
+    <div class="toast-bell">${opts.kind === 'system' ? '⚙' : '🔔'}</div>
+    <div class="toast-body">
+      ${opts.account ? `<div class="toast-meta">${opts.account}</div>` : ''}
+      <div class="toast-title">${opts.title}</div>
+      <div class="toast-preview">${opts.preview}</div>
+      ${opts.threadId ? `
+        <div class="toast-actions">
+          <button class="toast-btn" onclick="setView('inbox'); setTimeout(() => openThread('${opts.threadId}'), 50); this.closest('.toast').remove();">Open</button>
+          <button class="toast-btn ghost" onclick="this.closest('.toast').remove();">Dismiss</button>
+        </div>
+      ` : ''}
+    </div>
+  `;
+  container.appendChild(el);
+  setTimeout(() => { el.style.transition = 'opacity 0.4s, transform 0.4s'; el.style.opacity = '0'; el.style.transform = 'translateX(420px)'; setTimeout(() => el.remove(), 400); }, opts.kind === 'system' ? 5000 : 8000);
+}
+function simulateIncomingMessage() {
+  if (!notifyIsOn()) return;
+  // Pick a realistic-looking unread thread to use as the simulated new message
+  const samples = THREADS.filter(t => t.unread && t.intent !== 'spam');
+  const th = samples[Math.floor(Math.random() * samples.length)];
+  if (!th) return;
+  const acct = ACCOUNTS.find(a => a.id === th.account);
+  // In-app toast
+  showToast({
+    kind: 'message',
+    account: acct ? acct.label : '',
+    title: 'New message from ' + th.customer,
+    preview: th.preview.length > 100 ? th.preview.slice(0, 100) + '…' : th.preview,
+    threadId: th.id
+  });
+  // Browser notification (works even when tab is backgrounded)
+  if ('Notification' in window && Notification.permission === 'granted') {
+    try {
+      new Notification('New message · ' + (acct ? acct.label : '210 Cockpit'), {
+        body: th.customer + ': ' + (th.preview.length > 80 ? th.preview.slice(0, 80) + '…' : th.preview),
+        icon: 'icons/icon-192.png',
+        tag: 'cockpit-msg-' + th.id,
+        renotify: false,
+        silent: false
+      });
+    } catch (e) {}
+  }
+  // Vibrate on mobile
+  if ('vibrate' in navigator) {
+    try { navigator.vibrate([180, 80, 120]); } catch (e) {}
+  }
+}
+
 /* -------- BOOT + PWA -------- */
 function boot() {
   renderUserSwitcher();
@@ -3727,6 +4110,7 @@ function boot() {
   // only the English fallback for the first paint before JS runs).
   const sub = document.getElementById('brand-sub');
   if (sub) sub.textContent = t('brand_sub');
+  paintNotifyButton();
 }
 boot();
 
