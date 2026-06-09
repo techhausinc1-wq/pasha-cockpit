@@ -2961,9 +2961,19 @@ function renderCustomers() {
     <h3>${t('customers')}</h3>
     <p class="lead">${CUSTOMERS.length} ${t('customers_total')} · ${withEmail} ${t('customers_email')} · <b style="color:var(--warning);">${noEmail} ${t('customers_no_email')}</b></p>
 
-    ${userCanSee('customers_email') ? `
-    <button class="btn primary" style="margin-bottom:14px;" onclick="openNewCampaign()">${t('create_campaign')}</button>
-    ` : ''}
+    <div style="display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap;">
+      ${userCanSee('customers_email') ? `<button class="btn primary" onclick="openNewCampaign()">${t('create_campaign')}</button>` : ''}
+      <button class="btn ghost" onclick="downloadCustomersCSV('${CUST_SEG}')">Download list · CSV (${list.length})</button>
+      <button class="btn ghost" onclick="downloadEmailsTxt('${CUST_SEG}')">Emails only · TXT</button>
+      <button class="btn ghost" onclick="downloadPhonesTxt('${CUST_SEG}')">Phones only · TXT</button>
+    </div>
+    <div class="card tight" style="background:var(--surface-soft); border-style:dashed; margin-bottom:14px; font-size:12px; line-height:1.6;">
+      <b style="font-family:var(--label); font-weight:800; text-transform:uppercase; font-size:10px; letter-spacing:1px; color:var(--dim);">How to blast email every few months:</b><br>
+      1. Pick the segment (All / Recent / VIP / Financing). Tap <b>Download list · CSV</b>.<br>
+      2. Upload to Mailchimp / Constant Contact / Klaviyo (free tiers cover up to 500 contacts).<br>
+      3. Or paste <b>Emails only · TXT</b> into Gmail BCC line for a one-off blast (Gmail limit: 500/day from a personal account, more with Workspace).<br>
+      4. Phase 2 deployment will wire the in-app <b>New campaign</b> button to send directly via Resend — no copy/paste needed.
+    </div>
 
     <div class="scroll-x" style="margin-bottom:14px;">
       <div style="display:inline-block;">
@@ -3075,6 +3085,65 @@ function openCustomerDetail(cid) {
 function renderCustFilter(val, label) {
   const on = CUST_SEG === val;
   return `<button class="pill-filter ${on ? 'on' : ''}" onclick="CUST_SEG='${val}'; renderCustomers();">${label}</button>`;
+}
+
+/* Filter customers by the same segment logic the UI uses */
+function filterCustomersBySegment(seg) {
+  let list = CUSTOMERS.slice();
+  if (seg === 'recent') list = list.filter(c => new Date(c.last) > new Date('2026-03-09'));
+  if (seg === 'vip') list = list.filter(c => c.spent >= 5000);
+  if (seg === 'finance') list = list.filter(c => c.tags.some(t => t.startsWith('finance')));
+  if (seg === 'no_email') list = list.filter(c => !c.email);
+  return list;
+}
+
+/* Full CSV export — name, phone, email, last_purchase, lifetime_spend, source, tags.
+   Respects the active segment so you get just VIPs / just recents / etc.
+   Ready to upload to Mailchimp, Constant Contact, Klaviyo. */
+function downloadCustomersCSV(seg) {
+  const list = filterCustomersBySegment(seg);
+  const headers = ['Name', 'First Name', 'Last Name', 'Phone', 'Email', 'Last Purchase', 'Lifetime Spend', 'Source', 'Tags'];
+  const rows = [headers];
+  list.forEach(c => {
+    const parts = c.name.split(' ');
+    const first = parts[0] || '';
+    const last = parts.slice(1).join(' ') || '';
+    rows.push([c.name, first, last, c.phone || '', c.email || '', c.last, c.spent, c.source, c.tags.join(';')]);
+  });
+  const csv = rows.map(r => r.map(cell => {
+    const s = String(cell == null ? '' : cell);
+    return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  }).join(',')).join('\n');
+  triggerDownload(csv, `210-customers-${seg}-${TODAY}.csv`, 'text/csv;charset=utf-8');
+}
+
+/* Plain emails one per line — fastest path to Gmail BCC or any TXT-import marketing tool */
+function downloadEmailsTxt(seg) {
+  const list = filterCustomersBySegment(seg).filter(c => c.email);
+  if (list.length === 0) { alert('No customers in this segment have an email captured.'); return; }
+  const txt = list.map(c => c.email).join('\n');
+  triggerDownload(txt, `210-emails-${seg}-${TODAY}.txt`, 'text/plain;charset=utf-8');
+}
+
+/* Plain phones one per line — for SMS marketing tools or manual import */
+function downloadPhonesTxt(seg) {
+  const list = filterCustomersBySegment(seg).filter(c => c.phone);
+  if (list.length === 0) { alert('No customers in this segment have a phone captured.'); return; }
+  const txt = list.map(c => c.phone).join('\n');
+  triggerDownload(txt, `210-phones-${seg}-${TODAY}.txt`, 'text/plain;charset=utf-8');
+}
+
+/* Shared helper — creates a download blob, clicks it, cleans up */
+function triggerDownload(content, filename, mimeType) {
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 function openNewCampaign() {
