@@ -1592,12 +1592,12 @@ const ADS = [
 ];
 
 const RESEARCH_IDEAS = [
-  { id: 'r1', title: 'JBSA / Lackland — base housing partnerships', est_cost: '$0-300/mo (table fee or sponsorship)', reach: '~30K active personnel + families', next: 'Llamar al MWR office en Lackland — partnership con on-base events', score: 'high' },
-  { id: 'r2', title: 'Tejano 107.5 FM — Spanish radio buy', est_cost: '$800-1,500/mo (morning drive)', reach: '~140K weekly Spanish-speaking listeners SA metro', next: 'Pedir media kit — comparar tarifa con KISS-FM Spanish', score: 'med' },
-  { id: 'r3', title: 'HEB neighborhood flyer drop', est_cost: '$0.04/door (~$400 for 10K doors)', reach: 'Targeted ZIP codes around showroom', next: 'EDDM (USPS Every Door Direct Mail) — diseño primero, prueba con 78211 y 78224', score: 'med' },
-  { id: 'r4', title: 'Apartment leasing office partnerships', est_cost: '$50 referral per close', reach: '12 large complexes within 5mi', next: 'Lista de propiedades · pitch deck de 1 página · llamar al office manager', score: 'high' },
-  { id: 'r5', title: 'Spanish-language TikTok creator partnerships', est_cost: '$200-800 per creator post', reach: '5K-50K niche audience per creator', next: 'Identificar 3 creators SA Latino · DM con afiliado deal', score: 'med' },
-  { id: 'r6', title: 'YouTube Shorts — DIY assembly tips', est_cost: '$0 (in-house), ~2hr/week', reach: 'Long-tail organic — compounding over months', next: 'Christian o María graban en showroom · subir 3 videos/semana', score: 'low' },
+  { id: 'r1', title: 'JBSA / Lackland — base housing partnerships', est_cost: '$0-300/mo (table fee or sponsorship)', reach: '~30K active personnel + families', next: 'Call the MWR office at Lackland — on-base events partnership', score: 'high' },
+  { id: 'r2', title: 'Tejano 107.5 FM — Spanish radio buy', est_cost: '$800-1,500/mo (morning drive)', reach: '~140K weekly Spanish-speaking listeners SA metro', next: 'Request media kit — compare rate with KISS-FM Spanish', score: 'med' },
+  { id: 'r3', title: 'HEB neighborhood flyer drop', est_cost: '$0.04/door (~$400 for 10K doors)', reach: 'Targeted ZIP codes around showroom', next: 'EDDM (USPS Every Door Direct Mail) — design first, test with 78211 and 78224', score: 'med' },
+  { id: 'r4', title: 'Apartment leasing office partnerships', est_cost: '$50 referral per close', reach: '12 large complexes within 5mi', next: 'List the properties · 1-page pitch deck · call each office manager', score: 'high' },
+  { id: 'r5', title: 'Spanish-language TikTok creator partnerships', est_cost: '$200-800 per creator post', reach: '5K-50K niche audience per creator', next: 'Identify 3 SA Latino creators · DM with affiliate deal', score: 'med' },
+  { id: 'r6', title: 'YouTube Shorts — DIY assembly tips', est_cost: '$0 (in-house), ~2hr/week', reach: 'Long-tail organic — compounding over months', next: 'Christian or María film in showroom · upload 3 videos/week', score: 'low' },
 ];
 
 const YESTERDAY_REPORT = {
@@ -2206,7 +2206,7 @@ function openInvoiceDetail(id) {
       </div>
       <button class="modal-close" onclick="closeModal()">&times;</button>
     </div>
-    ${inv.source === 'scanned' ? `<div class="card" style="background:var(--accent-soft); margin-bottom:14px; padding:10px; text-align:center; font-size:11px; color:var(--accent-deep); font-family:var(--mono); text-transform:uppercase; letter-spacing:1px;">${t('invoices_scanned')} · OCR aplicado</div>` : ''}
+    ${inv.source === 'scanned' ? `<div class="card" style="background:var(--accent-soft); margin-bottom:14px; padding:10px; text-align:center; font-size:11px; color:var(--accent-deep); font-family:var(--mono); text-transform:uppercase; letter-spacing:1px;">${t('invoices_scanned')} · OCR applied</div>` : ''}
     <div class="row"><span class="lbl">Cliente</span><span class="val">${inv.customer}</span></div>
     <div class="row"><span class="lbl">${t('delivery_address')}</span><span class="val" style="font-size:11px;">${inv.deliv_addr}</span></div>
     <div class="row"><span class="lbl">${t('payment_method')}</span><span class="val">${t('method_' + inv.method) || inv.method}</span></div>
@@ -2227,8 +2227,8 @@ function openInvoiceDetail(id) {
       <span class="val" style="font-size:18px;">$${inv.total.toLocaleString()}</span>
     </div>
     <div style="display:flex; gap:8px; margin-top:14px;">
-      <button class="btn primary" style="flex:2;" onclick="printInvoice('${inv.id}')">Imprimir recibo</button>
-      ${inv.status !== 'paid' ? `<button class="btn ghost" style="flex:1;" onclick="markInvPaid('${inv.id}', 'cash'); closeModal(); renderInvoices();">Marcar pagado</button>` : ''}
+      <button class="btn primary" style="flex:2;" onclick="printInvoice('${inv.id}')">Print receipt</button>
+      ${inv.status !== 'paid' ? `<button class="btn ghost" style="flex:1;" onclick="markInvPaid('${inv.id}', 'cash'); closeModal(); renderInvoices();">Mark as paid</button>` : ''}
     </div>
   `);
 }
@@ -2255,20 +2255,20 @@ function renderNewInvoice() {
     <div class="modal-head">
       <div>
         <div style="font-weight:600; font-size:16px;">${t('new_invoice_title')}</div>
-        <div style="font-family:var(--mono); font-size:11px; color:var(--dim); margin-top:2px;">Toca artículos para agregar · ideal para iPad/teléfono</div>
+        <div style="font-family:var(--mono); font-size:11px; color:var(--dim); margin-top:2px;">Tap items to add · ideal for iPad / phone</div>
       </div>
       <button class="modal-close" onclick="closeModal()">&times;</button>
     </div>
 
-    <div class="field"><label class="field-lbl">Cliente</label><input class="input" placeholder="Nombre del cliente" value="${NEW_INV.customer}" oninput="NEW_INV.customer=this.value;"></div>
+    <div class="field"><label class="field-lbl">Customer</label><input class="input" placeholder="Customer name" value="${NEW_INV.customer}" oninput="NEW_INV.customer=this.value;"></div>
     <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
-      <div class="field"><label class="field-lbl">Teléfono</label><input class="input" placeholder="(210) 555-XXXX" value="${NEW_INV.phone}" oninput="NEW_INV.phone=this.value;"></div>
-      <div class="field"><label class="field-lbl">Email</label><input class="input" placeholder="cliente@email.com" type="email" value="${NEW_INV.email}" oninput="NEW_INV.email=this.value;"></div>
+      <div class="field"><label class="field-lbl">Phone</label><input class="input" placeholder="(210) 555-XXXX" value="${NEW_INV.phone}" oninput="NEW_INV.phone=this.value;"></div>
+      <div class="field"><label class="field-lbl">Email</label><input class="input" placeholder="customer@email.com" type="email" value="${NEW_INV.email}" oninput="NEW_INV.email=this.value;"></div>
     </div>
 
     <div class="field">
-      <label class="field-lbl">Buscar SKU · toca para agregar</label>
-      <input class="input" placeholder="Buscar por nombre, SKU o categoría..." value="${NEW_INV.search}" oninput="NEW_INV.search=this.value; renderNewInvoice();" autofocus>
+      <label class="field-lbl">Search SKU · tap to add</label>
+      <input class="input" placeholder="Search by name, SKU, or category..." value="${NEW_INV.search}" oninput="NEW_INV.search=this.value; renderNewInvoice();" autofocus>
     </div>
 
     <div style="display:grid; grid-template-columns:repeat(2,1fr); gap:6px; max-height:240px; overflow-y:auto; padding:4px; background:var(--surface-soft); border-radius:8px; margin-bottom:12px;">
@@ -2320,7 +2320,7 @@ function renderNewInvoice() {
         <option value="finance_progressive">${t('method_finance_progressive')}</option>
       </select>
     </div>
-    <div class="field"><label class="field-lbl">${t('delivery_address')}</label><input class="input" placeholder="Pickup o dirección completa..." value="${NEW_INV.addr}" oninput="NEW_INV.addr=this.value;"></div>
+    <div class="field"><label class="field-lbl">${t('delivery_address')}</label><input class="input" placeholder="Pickup or full address..." value="${NEW_INV.addr}" oninput="NEW_INV.addr=this.value;"></div>
     <div class="field" style="background:var(--surface-soft); padding:12px; border-radius:8px; text-align:center;">
       <div class="field-lbl" style="margin-bottom:8px;">${t('customer_signature')}</div>
       <div style="border:1px dashed var(--border); border-radius:6px; height:80px; background:var(--surface); display:flex; align-items:center; justify-content:center; color:var(--dim); font-style:italic;">${t('sign_here')}</div>
@@ -2386,13 +2386,13 @@ function openPostSaleActions(inv) {
     </div>
     <div style="text-align:center; padding:14px 0;">
       <div style="font-family:var(--serif); font-size:42px; color:var(--success); margin-bottom:8px;">✓</div>
-      <div style="font-weight:600; font-size:15px; margin-bottom:4px;">Lista para firmar e imprimir</div>
-      <div style="font-size:12px; color:var(--dim);">El cliente firma el papel impreso o en la pantalla. Procesa la tarjeta o marca "efectivo recibido."</div>
+      <div style="font-weight:600; font-size:15px; margin-bottom:4px;">Ready to sign and print</div>
+      <div style="font-size:12px; color:var(--dim);">Customer signs the printed receipt or on screen. Process the card in person or mark "cash received."</div>
     </div>
-    <button class="btn primary full" style="margin-bottom:8px;" onclick="printInvoice('${inv.id}')">Imprimir recibo (botón único)</button>
-    <button class="btn ghost full" style="margin-bottom:8px;" onclick="markInvPaid('${inv.id}', 'cash'); closeModal(); renderInvoices();">Marcar pagado · efectivo</button>
-    <button class="btn ghost full" style="margin-bottom:8px;" onclick="markInvPaid('${inv.id}', 'card'); closeModal(); renderInvoices();">Marcar pagado · tarjeta procesada en persona</button>
-    <button class="btn ghost full" onclick="openInvoiceDetail('${inv.id}')">Ver detalle de la factura</button>
+    <button class="btn primary full" style="margin-bottom:8px;" onclick="printInvoice('${inv.id}')">Print receipt (one-button)</button>
+    <button class="btn ghost full" style="margin-bottom:8px;" onclick="markInvPaid('${inv.id}', 'cash'); closeModal(); renderInvoices();">Mark paid · cash</button>
+    <button class="btn ghost full" style="margin-bottom:8px;" onclick="markInvPaid('${inv.id}', 'card'); closeModal(); renderInvoices();">Mark paid · card processed in person</button>
+    <button class="btn ghost full" onclick="openInvoiceDetail('${inv.id}')">View invoice detail</button>
   `);
 }
 
@@ -2521,81 +2521,80 @@ function renderFinanceApp() {
   if (step === 1) {
     body = `
       <div style="text-align:center; padding:6px 0 14px;">
-        <div style="font-family:var(--mono); font-size:10px; letter-spacing:1.5px; text-transform:uppercase; color:var(--dim); margin-bottom:4px;">Aplicación de financiamiento</div>
+        <div style="font-family:var(--mono); font-size:10px; letter-spacing:1.5px; text-transform:uppercase; color:var(--dim); margin-bottom:4px;">Finance application</div>
         <div style="font-family:var(--serif); font-size:22px; font-weight:500; color:${lender.color};">${lender.name}</div>
-        <div style="font-size:12px; color:var(--dim); margin-top:4px;">Cantidad solicitada: <b style="color:var(--ink);">$${requested.toLocaleString()}</b> · límite del prestamista: $${lender.cap.toLocaleString()}</div>
+        <div style="font-size:12px; color:var(--dim); margin-top:4px;">Requested amount: <b style="color:var(--ink);">$${requested.toLocaleString()}</b> · lender cap: $${lender.cap.toLocaleString()}</div>
       </div>
       <div style="background:var(--surface-soft); padding:12px; border-radius:8px; margin-bottom:14px; font-size:12px; color:var(--dim); line-height:1.5;">
-        El cliente puede llenar esto en tu iPad o lo llenas tú con la información del cliente. Tarda ~2 minutos. La verificación no afecta el crédito.
+        The customer can fill this out on your iPad, or you can fill it in for them. Takes ~2 minutes. The check does not affect credit.
       </div>
-      <h2 style="margin-top:0;">Paso 1 · Información personal</h2>
+      <h2 style="margin-top:0;">Step 1 · Personal info</h2>
       <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
-        <div class="field"><label class="field-lbl">Nombre completo</label><input class="input" placeholder="María González" id="fa-name"></div>
-        <div class="field"><label class="field-lbl">Fecha de nacimiento</label><input class="input" type="date" id="fa-dob"></div>
-        <div class="field"><label class="field-lbl">Teléfono</label><input class="input" placeholder="(210) 555-XXXX" id="fa-phone"></div>
-        <div class="field"><label class="field-lbl">Email</label><input class="input" type="email" placeholder="cliente@email.com" id="fa-email"></div>
+        <div class="field"><label class="field-lbl">Full name</label><input class="input" placeholder="Maria Gonzalez" id="fa-name"></div>
+        <div class="field"><label class="field-lbl">Date of birth</label><input class="input" type="date" id="fa-dob"></div>
+        <div class="field"><label class="field-lbl">Phone</label><input class="input" placeholder="(210) 555-XXXX" id="fa-phone"></div>
+        <div class="field"><label class="field-lbl">Email</label><input class="input" type="email" placeholder="customer@email.com" id="fa-email"></div>
       </div>
-      <div class="field"><label class="field-lbl">Últimos 4 del SSN</label><input class="input" placeholder="XXXX" maxlength="4" inputmode="numeric" id="fa-ssn"></div>
-      <button class="btn primary full" onclick="financeAppNext()">Continuar · Paso 2 →</button>
+      <div class="field"><label class="field-lbl">Last 4 of SSN</label><input class="input" placeholder="XXXX" maxlength="4" inputmode="numeric" id="fa-ssn"></div>
+      <button class="btn primary full" onclick="financeAppNext()">Continue · Step 2 →</button>
     `;
   } else if (step === 2) {
     body = `
-      <div style="font-family:var(--mono); font-size:10px; letter-spacing:1.5px; text-transform:uppercase; color:var(--dim); margin-bottom:14px; text-align:center;">Aplicación · ${lender.name} · paso 2 de 3</div>
-      <h2 style="margin-top:0;">Paso 2 · Dirección y empleo</h2>
-      <div class="field"><label class="field-lbl">Dirección actual</label><input class="input" placeholder="Calle, número" id="fa-addr"></div>
+      <div style="font-family:var(--mono); font-size:10px; letter-spacing:1.5px; text-transform:uppercase; color:var(--dim); margin-bottom:14px; text-align:center;">Application · ${lender.name} · step 2 of 3</div>
+      <h2 style="margin-top:0;">Step 2 · Address &amp; employment</h2>
+      <div class="field"><label class="field-lbl">Current address</label><input class="input" placeholder="Street, number" id="fa-addr"></div>
       <div style="display:grid; grid-template-columns:2fr 1fr 1fr; gap:8px;">
-        <div class="field"><label class="field-lbl">Ciudad</label><input class="input" value="San Antonio" id="fa-city"></div>
-        <div class="field"><label class="field-lbl">Estado</label><input class="input" value="TX" id="fa-state"></div>
+        <div class="field"><label class="field-lbl">City</label><input class="input" value="San Antonio" id="fa-city"></div>
+        <div class="field"><label class="field-lbl">State</label><input class="input" value="TX" id="fa-state"></div>
         <div class="field"><label class="field-lbl">ZIP</label><input class="input" placeholder="78217" id="fa-zip"></div>
       </div>
-      <div class="field"><label class="field-lbl">Tiempo en esta dirección</label>
+      <div class="field"><label class="field-lbl">Time at this address</label>
         <select class="select" id="fa-addr-time">
-          <option>Menos de 6 meses</option><option>6-12 meses</option><option>1-2 años</option><option selected>Más de 2 años</option>
+          <option>Less than 6 months</option><option>6-12 months</option><option>1-2 years</option><option selected>More than 2 years</option>
         </select>
       </div>
       <div class="divider"></div>
-      <div class="field"><label class="field-lbl">Empleador</label><input class="input" placeholder="Nombre de la empresa" id="fa-emp"></div>
+      <div class="field"><label class="field-lbl">Employer</label><input class="input" placeholder="Company name" id="fa-emp"></div>
       <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
-        <div class="field"><label class="field-lbl">Puesto</label><input class="input" id="fa-pos"></div>
-        <div class="field"><label class="field-lbl">Ingreso mensual (after-tax)</label><input class="input" placeholder="$3,200" id="fa-income"></div>
+        <div class="field"><label class="field-lbl">Position</label><input class="input" id="fa-pos"></div>
+        <div class="field"><label class="field-lbl">Monthly income (after-tax)</label><input class="input" placeholder="$3,200" id="fa-income"></div>
       </div>
       <div style="display:flex; gap:8px;">
-        <button class="btn ghost" style="flex:1;" onclick="FINANCE_APP.step=1; renderFinanceApp();">← Atrás</button>
-        <button class="btn primary" style="flex:2;" onclick="financeAppNext()">Continuar · Paso 3 →</button>
+        <button class="btn ghost" style="flex:1;" onclick="FINANCE_APP.step=1; renderFinanceApp();">← Back</button>
+        <button class="btn primary" style="flex:2;" onclick="financeAppNext()">Continue · Step 3 →</button>
       </div>
     `;
   } else if (step === 3) {
     body = `
-      <div style="font-family:var(--mono); font-size:10px; letter-spacing:1.5px; text-transform:uppercase; color:var(--dim); margin-bottom:14px; text-align:center;">Aplicación · ${lender.name} · paso 3 de 3</div>
-      <h2 style="margin-top:0;">Paso 3 · Referencias y enviar</h2>
-      <div style="font-size:12px; color:var(--dim); margin-bottom:10px;">Dos personas que no vivan contigo y puedan confirmar tu identidad.</div>
-      <div class="field"><label class="field-lbl">Referencia 1 · nombre</label><input class="input" id="fa-r1n"></div>
-      <div class="field"><label class="field-lbl">Referencia 1 · teléfono</label><input class="input" id="fa-r1p"></div>
-      <div class="field"><label class="field-lbl">Referencia 2 · nombre</label><input class="input" id="fa-r2n"></div>
-      <div class="field"><label class="field-lbl">Referencia 2 · teléfono</label><input class="input" id="fa-r2p"></div>
+      <div style="font-family:var(--mono); font-size:10px; letter-spacing:1.5px; text-transform:uppercase; color:var(--dim); margin-bottom:14px; text-align:center;">Application · ${lender.name} · step 3 of 3</div>
+      <h2 style="margin-top:0;">Step 3 · References &amp; submit</h2>
+      <div style="font-size:12px; color:var(--dim); margin-bottom:10px;">Two people who don't live with you and can confirm your identity.</div>
+      <div class="field"><label class="field-lbl">Reference 1 · name</label><input class="input" id="fa-r1n"></div>
+      <div class="field"><label class="field-lbl">Reference 1 · phone</label><input class="input" id="fa-r1p"></div>
+      <div class="field"><label class="field-lbl">Reference 2 · name</label><input class="input" id="fa-r2n"></div>
+      <div class="field"><label class="field-lbl">Reference 2 · phone</label><input class="input" id="fa-r2p"></div>
       <div class="field" style="background:var(--surface-soft); padding:12px; border-radius:8px;">
         <label style="display:flex; align-items:flex-start; gap:8px; font-size:12px; line-height:1.5;">
           <input type="checkbox" checked style="margin-top:2px;">
-          <span>Autorizo a ${lender.name} a verificar mi identidad e historial. Entiendo que esta verificación no afecta mi puntaje de crédito.</span>
+          <span>I authorize ${lender.name} to verify my identity and history. I understand this check does not affect my credit score.</span>
         </label>
       </div>
       <div style="display:flex; gap:8px;">
-        <button class="btn ghost" style="flex:1;" onclick="FINANCE_APP.step=2; renderFinanceApp();">← Atrás</button>
-        <button class="btn primary" style="flex:2; background:${lender.color};" onclick="financeAppSubmit()">Enviar a ${lender.name}</button>
+        <button class="btn ghost" style="flex:1;" onclick="FINANCE_APP.step=2; renderFinanceApp();">← Back</button>
+        <button class="btn primary" style="flex:2; background:${lender.color};" onclick="financeAppSubmit()">Submit to ${lender.name}</button>
       </div>
     `;
   } else if (step === 4) {
     body = `
       <div style="text-align:center; padding:30px 0;">
         <div style="width:60px; height:60px; margin:0 auto 14px; background:var(--surface-soft); border-radius:50%; display:flex; align-items:center; justify-content:center; font-family:var(--mono); color:${lender.color}; font-size:22px; animation: pulse 1.5s infinite;">…</div>
-        <div style="font-weight:600; font-size:16px; margin-bottom:6px;">Enviando a ${lender.name}</div>
-        <div style="font-size:13px; color:var(--dim);">La respuesta del prestamista llega en 15-45 segundos.</div>
+        <div style="font-weight:600; font-size:16px; margin-bottom:6px;">Submitting to ${lender.name}</div>
+        <div style="font-size:13px; color:var(--dim);">The lender response arrives in 15-45 seconds.</div>
       </div>
       <style>@keyframes pulse { 0%,100%{opacity:0.4;} 50%{opacity:1;} }</style>
     `;
     setTimeout(() => { FINANCE_APP.step = 5; renderFinanceApp(); }, 2200);
   } else if (step === 5) {
-    // Approval / decline / counter logic — simulated
     const approved = requested <= lender.cap;
     const counter = !approved && requested <= lender.cap * 1.5;
     const term = 24;
@@ -2603,39 +2602,39 @@ function renderFinanceApp() {
     body = approved ? `
       <div style="text-align:center; padding:20px 0;">
         <div style="font-family:var(--serif); font-size:42px; color:var(--success); margin-bottom:8px;">✓</div>
-        <div style="font-weight:700; font-size:18px; color:var(--success); margin-bottom:6px;">APROBADO</div>
-        <div style="font-size:13px; color:var(--dim); margin-bottom:18px;">${lender.name} aprobó la solicitud</div>
+        <div style="font-weight:700; font-size:18px; color:var(--success); margin-bottom:6px;">APPROVED</div>
+        <div style="font-size:13px; color:var(--dim); margin-bottom:18px;">${lender.name} approved the application</div>
         <div style="background:var(--success-soft); padding:16px; border-radius:10px; margin-bottom:14px;">
-          <div style="font-family:var(--mono); font-size:10px; text-transform:uppercase; letter-spacing:1.5px; color:var(--success); margin-bottom:4px;">Monto aprobado</div>
+          <div style="font-family:var(--mono); font-size:10px; text-transform:uppercase; letter-spacing:1.5px; color:var(--success); margin-bottom:4px;">Amount approved</div>
           <div style="font-family:var(--mono); font-size:32px; font-weight:700;">$${requested.toLocaleString()}</div>
-          <div style="font-size:12px; color:var(--dim); margin-top:6px;">≈ $${monthly}/mes a ${term} meses</div>
+          <div style="font-size:12px; color:var(--dim); margin-top:6px;">≈ $${monthly}/mo over ${term} months</div>
         </div>
-        <button class="btn primary full" onclick="completeFinancedSale()">Finalizar venta · imprimir recibo</button>
+        <button class="btn primary full" onclick="completeFinancedSale()">Finalize sale · print receipt</button>
       </div>
     ` : counter ? `
       <div style="text-align:center; padding:20px 0;">
         <div style="font-family:var(--serif); font-size:42px; color:var(--warning); margin-bottom:8px;">≈</div>
-        <div style="font-weight:700; font-size:18px; color:var(--warning); margin-bottom:6px;">APROBADO PARCIAL</div>
-        <div style="font-size:13px; color:var(--dim); margin-bottom:18px;">${lender.name} aprobó una cantidad menor</div>
+        <div style="font-weight:700; font-size:18px; color:var(--warning); margin-bottom:6px;">PARTIALLY APPROVED</div>
+        <div style="font-size:13px; color:var(--dim); margin-bottom:18px;">${lender.name} approved a smaller amount</div>
         <div style="background:var(--warning-soft); padding:16px; border-radius:10px; margin-bottom:14px;">
-          <div style="font-family:var(--mono); font-size:10px; text-transform:uppercase; letter-spacing:1.5px; color:var(--warning); margin-bottom:4px;">Monto aprobado</div>
+          <div style="font-family:var(--mono); font-size:10px; text-transform:uppercase; letter-spacing:1.5px; color:var(--warning); margin-bottom:4px;">Amount approved</div>
           <div style="font-family:var(--mono); font-size:32px; font-weight:700;">$${lender.cap.toLocaleString()}</div>
-          <div style="font-size:12px; color:var(--dim); margin-top:6px;">Falta: $${(requested - lender.cap).toLocaleString()} — cliente paga la diferencia en efectivo/tarjeta</div>
+          <div style="font-size:12px; color:var(--dim); margin-top:6px;">Short by $${(requested - lender.cap).toLocaleString()} — customer pays the difference in cash or card</div>
         </div>
-        <button class="btn primary full" style="margin-bottom:6px;" onclick="completeFinancedSale()">Aceptar y finalizar venta</button>
-        <button class="btn ghost full" onclick="closeModal();">Cancelar — quitar artículos</button>
+        <button class="btn primary full" style="margin-bottom:6px;" onclick="completeFinancedSale()">Accept and finalize sale</button>
+        <button class="btn ghost full" onclick="closeModal();">Cancel — remove items</button>
       </div>
     ` : `
       <div style="text-align:center; padding:20px 0;">
         <div style="font-family:var(--serif); font-size:42px; color:var(--danger); margin-bottom:8px;">✕</div>
-        <div style="font-weight:700; font-size:18px; color:var(--danger); margin-bottom:6px;">RECHAZADO</div>
-        <div style="font-size:13px; color:var(--dim); margin-bottom:18px;">${lender.name} no aprobó esta solicitud</div>
+        <div style="font-weight:700; font-size:18px; color:var(--danger); margin-bottom:6px;">DECLINED</div>
+        <div style="font-size:13px; color:var(--dim); margin-bottom:18px;">${lender.name} did not approve this application</div>
         <div style="background:var(--danger-soft); padding:16px; border-radius:10px; margin-bottom:14px; font-size:12px; color:var(--dim); line-height:1.5;">
-          Intenta otro prestamista, o reduce el carrito a $${lender.cap.toLocaleString()} o menos. La cascada típica es: AF → Snap → Acima → Progressive.
+          Try another lender, or reduce the cart to $${lender.cap.toLocaleString()} or less. Typical waterfall: AF → Snap → Acima → Progressive.
         </div>
-        <button class="btn primary full" style="margin-bottom:6px;" onclick="openFinanceApp('finance_snap')">Probar Snap →</button>
-        <button class="btn ghost full" style="margin-bottom:6px;" onclick="openFinanceApp('finance_acima')">Probar Acima →</button>
-        <button class="btn ghost full" onclick="openFinanceApp('finance_progressive')">Probar Progressive →</button>
+        <button class="btn primary full" style="margin-bottom:6px;" onclick="openFinanceApp('finance_snap')">Try Snap →</button>
+        <button class="btn ghost full" style="margin-bottom:6px;" onclick="openFinanceApp('finance_acima')">Try Acima →</button>
+        <button class="btn ghost full" onclick="openFinanceApp('finance_progressive')">Try Progressive →</button>
       </div>
     `;
   }
@@ -2791,13 +2790,13 @@ function openNewCampaign() {
     </div>
     <div class="field">
       <label class="field-lbl">${t('campaign_subj')}</label>
-      <input class="input" value="Llegaron nuevas recámaras a 210 Discount — financiamiento sin crédito">
+      <input class="input" value="New bedroom sets just landed at 210 Discount — no-credit financing">
     </div>
     <div class="field">
       <label class="field-lbl">${t('campaign_body')}</label>
-      <textarea class="textarea" style="min-height:140px;">Hola — esta semana llegaron 12 modelos nuevos de recámara, todos con financiamiento sin crédito desde $50/mes. Ven a verlos en la sala de exhibición o respóndenos este correo para apartar.
+      <textarea class="textarea" style="min-height:140px;">Hi — 12 new bedroom sets just arrived this week, all with no-credit financing from $50/month. Stop by the showroom to see them, or reply to this email to put one on hold.
 
-Gracias por ser cliente de 210 Discount Furniture.
+Thanks for being a 210 Discount Furniture customer.
 
 — Pasha</textarea>
     </div>
@@ -2850,14 +2849,14 @@ function renderAds() {
 
     <div class="grid-2">
       <div class="card good">
-        <div class="card-title">Mejor ROAS</div>
+        <div class="card-title">Best ROAS</div>
         <div style="font-family:var(--serif); font-size:24px; font-weight:500; margin-top:8px;">Google Business</div>
-        <div style="font-size:12px; color:var(--dim); margin-top:4px;">$0 invertido · $5,400 atribuido · responde reseñas para mantenerlo arriba</div>
+        <div style="font-size:12px; color:var(--dim); margin-top:4px;">$0 spent · $5,400 attributed · respond to every review to keep it on top</div>
       </div>
       <div class="card attn">
-        <div class="card-title">Peor ROAS</div>
+        <div class="card-title">Worst ROAS</div>
         <div style="font-family:var(--serif); font-size:24px; font-weight:500; margin-top:8px;">TikTok Ads</div>
-        <div style="font-size:12px; color:var(--dim); margin-top:4px;">$900 invertido · $1,800 atribuido (2×) · revisar creativo o pausar</div>
+        <div style="font-size:12px; color:var(--dim); margin-top:4px;">$900 spent · $1,800 attributed (2×) · revise creative or pause</div>
       </div>
     </div>
 
@@ -2870,11 +2869,11 @@ function renderAds() {
       <div class="card">
         <div class="card-head">
           <span style="font-weight:600; font-size:14px;">${r.title}</span>
-          <span class="badge ${r.score === 'high' ? 'success' : r.score === 'med' ? 'warning' : ''}">${r.score === 'high' ? 'Alta prioridad' : r.score === 'med' ? 'Media' : 'Baja'}</span>
+          <span class="badge ${r.score === 'high' ? 'success' : r.score === 'med' ? 'warning' : ''}">${r.score === 'high' ? 'High priority' : r.score === 'med' ? 'Medium' : 'Low'}</span>
         </div>
-        <div class="row"><span class="lbl">${t('spend')} estimado</span><span class="val">${r.est_cost}</span></div>
-        <div class="row"><span class="lbl">Alcance</span><span class="val">${r.reach}</span></div>
-        <div style="margin-top:8px; font-size:12px; color:var(--dim);"><b style="color:var(--ink);">Próximo paso:</b> ${r.next}</div>
+        <div class="row"><span class="lbl">Est. spend</span><span class="val">${r.est_cost}</span></div>
+        <div class="row"><span class="lbl">Reach</span><span class="val">${r.reach}</span></div>
+        <div style="margin-top:8px; font-size:12px; color:var(--dim);"><b style="color:var(--ink);">Next step:</b> ${r.next}</div>
       </div>
     `).join('')}
 
@@ -3083,9 +3082,9 @@ function openResearchIdea() {
       <button class="modal-close" onclick="closeModal()">&times;</button>
     </div>
     <div class="field"><label class="field-lbl">Canal / idea</label><input class="input" placeholder="ej. Spanish-language podcast en SA"></div>
-    <div class="field"><label class="field-lbl">${t('spend')} estimado</label><input class="input" placeholder="$/mes o $/test"></div>
-    <div class="field"><label class="field-lbl">Alcance estimado</label><input class="input" placeholder="audiencia / impresiones"></div>
-    <div class="field"><label class="field-lbl">Próximo paso</label><textarea class="textarea" placeholder="ej. Llamar al sponsorship lead..."></textarea></div>
+    <div class="field"><label class="field-lbl">Est. spend</label><input class="input" placeholder="$/month or $/test"></div>
+    <div class="field"><label class="field-lbl">Reach</label><input class="input" placeholder="audience / impressions"></div>
+    <div class="field"><label class="field-lbl">Next step</label><textarea class="textarea" placeholder="e.g. Call the sponsorship lead..."></textarea></div>
     <button class="btn primary" onclick="alert('Saved (demo)'); closeModal();">${t('save')}</button>
   `);
 }
@@ -3279,7 +3278,7 @@ const REEL_THEMES = ['memorial_day','july4','summer','back_school','labor_day','
 const RECENT_REELS = [
   { id: 'r1', sku: 'SOFA-0443', theme: 'no_credit', title: 'Bryant Sectional · sin crédito hasta $5000', when: '2 days ago', views: 4820, leads: 14, plat: ['fb','ig','tt'] },
   { id: 'r2', sku: 'MATT-K-PT', theme: 'memorial_day', title: 'King Pillow-Top · Memorial Day 25% off', when: '6 days ago', views: 12300, leads: 38, plat: ['fb','ig','tt'] },
-  { id: 'r3', sku: 'BED-0427', theme: 'new_arrival', title: 'Recién llegado · Dresser & Mirror Set', when: '11 days ago', views: 2140, leads: 5, plat: ['fb','ig'] }
+  { id: 'r3', sku: 'BED-0427', theme: 'new_arrival', title: 'Just arrived · Dresser & Mirror Set', when: '11 days ago', views: 2140, leads: 5, plat: ['fb','ig'] }
 ];
 let REEL_STATE = { photos: 4, theme: 'no_credit', script: '' };
 function renderReels() {
