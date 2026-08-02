@@ -160,11 +160,25 @@ header {
 .toast .toast-btn.ghost { background: transparent; color: var(--dim); border: 0.5px solid var(--border); }
 
 /* NAV */
+.nav-wrap {
+  position: relative;
+  margin: 0 -16px;
+}
+/* Nav has more tabs than fit on a phone screen and scrolls horizontally --
+   scrollbar-width:none hides the only native hint that it scrolls at all,
+   so a sales associate on the floor has no way to discover "Invoices" and
+   everything after it exists. This fade is the affordance instead. */
+.nav-wrap::after {
+  content: '';
+  position: absolute; top: 0; right: 0; bottom: 0;
+  width: 28px;
+  background: linear-gradient(to right, transparent, var(--surface) 75%);
+  pointer-events: none;
+}
 nav {
   display: flex; gap: 2px;
   overflow-x: auto;
   scrollbar-width: none;
-  margin: 0 -16px;
   padding: 0 16px;
 }
 nav::-webkit-scrollbar { display: none; }
@@ -796,7 +810,7 @@ h3 {
     </button>
     <select class="user-switcher" id="user-switcher" onchange="switchUser(this.value)"></select>
   </div>
-  <nav id="nav"></nav>
+  <div class="nav-wrap"><nav id="nav"></nav></div>
 </header>
 
 <main>
