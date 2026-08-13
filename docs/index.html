@@ -824,6 +824,7 @@ h3 {
   <section class="view" id="view-scout"></section>
   <section class="view" id="view-reels"></section>
   <section class="view" id="view-team"></section>
+  <section class="view" id="view-live"></section>
 </main>
 
 <div class="modal-back" id="modal" onclick="if(event.target===this)closeModal()">
@@ -856,6 +857,7 @@ const I18N = {
     nav_customers: 'Clientes',
     nav_ads: 'Publicidad',
     nav_team: 'Equipo',
+    nav_live: 'En vivo',
     nav_reels: 'Videos',
     nav_scout: 'Scout',
     nav_order: 'Pedido rápido',
@@ -1080,6 +1082,7 @@ const I18N = {
     nav_customers: 'Customers',
     nav_ads: 'Ads',
     nav_team: 'Team',
+    nav_live: 'Live',
     nav_reels: 'Videos',
     nav_scout: 'Scout',
     nav_order: 'Easy order',
@@ -1305,6 +1308,7 @@ const I18N = {
     nav_ads: 'Реклама',
     nav_reels: 'Видео',
     nav_team: 'Команда',
+    nav_live: 'Онлайн',
     auto_reply_card: 'Автоответ включён',
     auto_reply_intro: '99% сообщений — это "это ещё в наличии?". Система отправляет шаблонный ответ через 30 секунд. Если ответишь первым — ничего не отправится. Если клиент пишет ещё раз после автоответа — уведомление получит вся команда.',
     auto_reply_queue: 'В очереди на автоответ',
@@ -1773,7 +1777,8 @@ function renderNav() {
     ['ads', 'nav_ads'],
     ['scout', 'nav_scout'],
     ['reels', 'nav_reels'],
-    ['team', 'nav_team']
+    ['team', 'nav_team'],
+    ['live', 'nav_live']
   ];
   document.getElementById('nav').innerHTML = tabs.map(([v, k]) =>
     `<button data-view="${v}" class="${v === CURRENT_VIEW ? 'active' : ''}" onclick="setView('${v}')">${t(k)}</button>`
@@ -1798,6 +1803,7 @@ function renderView() {
   if (CURRENT_VIEW === 'scout') renderScout();
   if (CURRENT_VIEW === 'reels') renderReels();
   if (CURRENT_VIEW === 'team') renderTeam();
+  if (CURRENT_VIEW === 'live') renderLive();
 }
 
 /* ============================================================
@@ -4082,6 +4088,189 @@ function togglePerm(uid, perm) {
   if (u.perms.includes(perm)) u.perms = u.perms.filter(p => p !== perm);
   else u.perms.push(perm);
   renderTeam();
+}
+
+/* ============================================================
+   LIVE VIEW — real API calls to the pasha-cockpit worker (WhatsApp,
+   customers, orders, deliveries). Everything else on this page is
+   fixture data for the demo; this tab is the one place that actually
+   talks to worker/src/main.ts. Config (API base URL + access code) is
+   stored in localStorage so it persists across visits without being
+   baked into this static, publicly-hosted file.
+   ============================================================ */
+const LIVE_CONFIG_KEY = 'pasha_live_config';
+function getLiveConfig() {
+  try {
+    return JSON.parse(localStorage.getItem(LIVE_CONFIG_KEY)) || { apiBase: '', accessCode: '' };
+  } catch {
+    return { apiBase: '', accessCode: '' };
+  }
+}
+function saveLiveConfig(apiBase, accessCode) {
+  localStorage.setItem(LIVE_CONFIG_KEY, JSON.stringify({ apiBase: apiBase.replace(/\/$/, ''), accessCode }));
+  renderLive();
+}
+
+let LIVE_DATA = { customers: null, orders: null, deliveries: null, threads: null, error: null, loading: false };
+
+async function liveFetch(path, opts) {
+  const { apiBase, accessCode } = getLiveConfig();
+  if (!apiBase) throw new Error('no_api_base');
+  const res = await fetch(apiBase + path, {
+    ...opts,
+    headers: { 'X-Access-Code': accessCode, 'Content-Type': 'application/json', ...(opts?.headers || {}) },
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `http_${res.status}`);
+  return data;
+}
+
+async function refreshLiveData() {
+  const { apiBase } = getLiveConfig();
+  if (!apiBase) { LIVE_DATA.error = 'no_api_base'; renderLive(); return; }
+  LIVE_DATA.loading = true; LIVE_DATA.error = null; renderLive();
+  try {
+    const [customers, orders, deliveries, threads] = await Promise.all([
+      liveFetch('/api/customers'),
+      liveFetch('/api/orders'),
+      liveFetch('/api/deliveries'),
+      liveFetch('/api/threads'),
+    ]);
+    LIVE_DATA.customers = customers.customers;
+    LIVE_DATA.orders = orders.orders;
+    LIVE_DATA.deliveries = deliveries.deliveries;
+    LIVE_DATA.threads = (threads.threads || []).filter(t => t.surface === 'wa');
+  } catch (err) {
+    LIVE_DATA.error = err.message;
+  }
+  LIVE_DATA.loading = false;
+  renderLive();
+}
+
+const NEW_LIVE_ORDER = { customer_id: '', customer_name: '', product_slugs: '', total_amount: '', deposit_amount: '', supplier: 'In stock' };
+async function submitLiveOrder() {
+  try {
+    await liveFetch('/api/orders', {
+      method: 'POST',
+      body: JSON.stringify({
+        customer_id: NEW_LIVE_ORDER.customer_id,
+        customer_name: NEW_LIVE_ORDER.customer_name,
+        product_slugs: NEW_LIVE_ORDER.product_slugs.split(',').map(s => s.trim()).filter(Boolean),
+        total_amount: Number(NEW_LIVE_ORDER.total_amount),
+        deposit_amount: Number(NEW_LIVE_ORDER.deposit_amount),
+        supplier: NEW_LIVE_ORDER.supplier,
+      }),
+    });
+    NEW_LIVE_ORDER.customer_id = ''; NEW_LIVE_ORDER.customer_name = '';
+    NEW_LIVE_ORDER.product_slugs = ''; NEW_LIVE_ORDER.total_amount = ''; NEW_LIVE_ORDER.deposit_amount = '';
+    await refreshLiveData();
+  } catch (err) {
+    alert('Order failed: ' + err.message);
+  }
+}
+
+function renderLive() {
+  const cfg = getLiveConfig();
+  const configHtml = `
+    <div class="card" style="background:var(--surface-soft); border-style:dashed;">
+      <div class="card-head"><span class="card-title">Worker connection</span></div>
+      <div class="field"><label class="field-lbl">Worker URL (e.g. https://pasha-cockpit.deno.dev)</label>
+        <input class="input" id="live-api-base" placeholder="https://..." value="${cfg.apiBase}">
+      </div>
+      <div class="field"><label class="field-lbl">Access code (pasha-shell-&lt;your id&gt;)</label>
+        <input class="input" id="live-access-code" placeholder="pasha-shell-paul" value="${cfg.accessCode}">
+      </div>
+      <button class="btn primary" onclick="saveLiveConfig(document.getElementById('live-api-base').value, document.getElementById('live-access-code').value); refreshLiveData();">Save &amp; connect</button>
+    </div>
+  `;
+
+  if (!cfg.apiBase) {
+    document.getElementById('view-live').innerHTML = `
+      <h3>Live Ops</h3>
+      <p class="lead">Real WhatsApp threads, customer records, deposits, and deliveries — not demo data. Set the worker URL below once it's deployed.</p>
+      ${configHtml}
+    `;
+    return;
+  }
+
+  if (LIVE_DATA.loading) {
+    document.getElementById('view-live').innerHTML = `<h3>Live Ops</h3>${configHtml}<div class="empty">Loading…</div>`;
+    return;
+  }
+
+  if (LIVE_DATA.error) {
+    document.getElementById('view-live').innerHTML = `
+      <h3>Live Ops</h3>${configHtml}
+      <div class="card attn"><div class="card-title">Couldn't reach the worker</div>
+      <div style="font-size:12px; margin-top:6px;">${LIVE_DATA.error} — check the URL and access code above, and that the worker is actually deployed and running.</div></div>
+      <button class="btn ghost" onclick="refreshLiveData()">Retry</button>
+    `;
+    return;
+  }
+
+  if (LIVE_DATA.customers === null) {
+    document.getElementById('view-live').innerHTML = `${configHtml}<button class="btn primary full" onclick="refreshLiveData()">Load live data</button>`;
+    return;
+  }
+
+  const html = `
+    <h3>Live Ops</h3>
+    ${configHtml}
+    <div style="display:flex; justify-content:flex-end; margin:10px 0;"><button class="btn ghost" onclick="refreshLiveData()">Refresh</button></div>
+
+    <div class="card">
+      <div class="card-head"><span class="card-title">WhatsApp threads</span><span class="card-extra">${LIVE_DATA.threads.length}</span></div>
+      ${LIVE_DATA.threads.length === 0 ? '<div class="empty">No WhatsApp messages yet.</div>' : LIVE_DATA.threads.map(t => `
+        <div class="row">
+          <div style="flex:1;"><div class="lbl">${t.customer_name}</div><div class="meta">${t.preview}</div></div>
+          <div class="val">${t.unread ? '●' : ''}</div>
+        </div>
+      `).join('')}
+    </div>
+
+    <div class="card">
+      <div class="card-head"><span class="card-title">Customers</span><span class="card-extra">${LIVE_DATA.customers.length}</span></div>
+      ${LIVE_DATA.customers.map(c => `
+        <div class="row">
+          <div style="flex:1;"><div class="lbl">${c.name}</div><div class="meta">${c.phone || 'no phone on file'} · LTV $${c.lifetime_value.toLocaleString()}${c.tags.length ? ' · ' + c.tags.join(', ') : ''}</div></div>
+        </div>
+      `).join('')}
+    </div>
+
+    <div class="card">
+      <div class="card-head"><span class="card-title">Orders (deposit ledger)</span><span class="card-extra">${LIVE_DATA.orders.length}</span></div>
+      ${LIVE_DATA.orders.map(o => `
+        <div class="row">
+          <div style="flex:1;"><div class="lbl">${o.customer_name} — ${o.product_slugs.join(', ')}</div>
+          <div class="meta">${o.status} · ${o.supplier} · deposit $${o.deposit_amount.toLocaleString()} · balance due $${o.balance_due.toLocaleString()}</div></div>
+        </div>
+      `).join('')}
+      <div class="divider"></div>
+      <div style="font-weight:600; font-size:13px; margin-bottom:8px;">New order</div>
+      <div class="field"><label class="field-lbl">Customer ID</label><input class="input" placeholder="c_..." value="${NEW_LIVE_ORDER.customer_id}" oninput="NEW_LIVE_ORDER.customer_id=this.value;"></div>
+      <div class="field"><label class="field-lbl">Customer name</label><input class="input" value="${NEW_LIVE_ORDER.customer_name}" oninput="NEW_LIVE_ORDER.customer_name=this.value;"></div>
+      <div class="field"><label class="field-lbl">Product slugs (comma-separated)</label><input class="input" value="${NEW_LIVE_ORDER.product_slugs}" oninput="NEW_LIVE_ORDER.product_slugs=this.value;"></div>
+      <div class="field"><label class="field-lbl">Total amount</label><input class="input" type="number" value="${NEW_LIVE_ORDER.total_amount}" oninput="NEW_LIVE_ORDER.total_amount=this.value;"></div>
+      <div class="field"><label class="field-lbl">Deposit amount</label><input class="input" type="number" value="${NEW_LIVE_ORDER.deposit_amount}" oninput="NEW_LIVE_ORDER.deposit_amount=this.value;"></div>
+      <div class="field"><label class="field-lbl">Supplier</label>
+        <select class="select" onchange="NEW_LIVE_ORDER.supplier=this.value;">
+          ${['In stock', 'Crown Mark', 'Happy Homes', 'Other'].map(s => `<option ${NEW_LIVE_ORDER.supplier === s ? 'selected' : ''}>${s}</option>`).join('')}
+        </select>
+      </div>
+      <button class="btn primary full" onclick="submitLiveOrder()">Create order</button>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><span class="card-title">Deliveries</span><span class="card-extra">${LIVE_DATA.deliveries.length}</span></div>
+      ${LIVE_DATA.deliveries.length === 0 ? '<div class="empty">Nothing scheduled.</div>' : LIVE_DATA.deliveries.map(d => `
+        <div class="row">
+          <div style="flex:1;"><div class="lbl">${d.customer_name} — ${d.scheduled_date}</div>
+          <div class="meta">${d.route_label} · ${d.crew || 'no crew assigned'} · ${d.status}</div></div>
+        </div>
+      `).join('')}
+    </div>
+  `;
+  document.getElementById('view-live').innerHTML = html;
 }
 
 /* -------- MODAL HELPERS -------- */
