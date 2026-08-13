@@ -4,9 +4,33 @@
 // code maps to a user; the user's role + permission atoms determine what the
 // API returns. Workers see only their assigned accounts; masters see all.
 
-import { effectiveAtoms, findUser, SHELL_USERS, type User } from "./lib/rbac.ts";
-import { SAMPLE_AP, SAMPLE_APPLICATIONS, SAMPLE_TAX, SAMPLE_THREADS, TODAY_STATS, TRUCKS_INBOUND } from "./lib/sample-data.ts";
-import { classifyByRules, draftReply, type InboundContext } from "./lib/drafter.ts";
+import {
+  effectiveAtoms,
+  findUser,
+  SHELL_USERS,
+  type User,
+} from "./lib/rbac.ts";
+import {
+  SAMPLE_AP,
+  SAMPLE_APPLICATIONS,
+  SAMPLE_TAX,
+  SAMPLE_THREADS,
+  TODAY_STATS,
+  TRUCKS_INBOUND,
+  upsertWhatsAppThread,
+  WHATSAPP_LIVE_THREADS,
+} from "./lib/sample-data.ts";
+import {
+  classifyByRules,
+  draftReply,
+  type InboundContext,
+} from "./lib/drafter.ts";
+import {
+  handleWebhookVerification,
+  parseWebhookPayload,
+  sendWhatsAppText,
+  verifyWebhookSignature,
+} from "./lib/whatsapp.ts";
 
 const PORT = parseInt(Deno.env.get("PORT") || "8001");
 const WEB_DIR = new URL("../../web/", import.meta.url).pathname;
@@ -55,12 +79,19 @@ async function serveStatic(pathname: string): Promise<Response> {
   try {
     const body = await Deno.readFile(fsPath);
     const ext = fsPath.split(".").pop()!.toLowerCase();
-    const mime = ext === "html" ? "text/html; charset=utf-8" :
-                 ext === "css" ? "text/css; charset=utf-8" :
-                 ext === "js" ? "application/javascript; charset=utf-8" :
-                 ext === "json" ? "application/json; charset=utf-8" :
-                 "application/octet-stream";
-    return new Response(body, { status: 200, headers: { "Content-Type": mime, "Cache-Control": "no-cache" } });
+    const mime = ext === "html"
+      ? "text/html; charset=utf-8"
+      : ext === "css"
+      ? "text/css; charset=utf-8"
+      : ext === "js"
+      ? "application/javascript; charset=utf-8"
+      : ext === "json"
+      ? "application/json; charset=utf-8"
+      : "application/octet-stream";
+    return new Response(body, {
+      status: 200,
+      headers: { "Content-Type": mime, "Cache-Control": "no-cache" },
+    });
   } catch {
     return new Response("Not found", { status: 404 });
   }
@@ -69,10 +100,16 @@ async function serveStatic(pathname: string): Promise<Response> {
 console.log(`Pasha cockpit shell listening on http://localhost:${PORT}`);
 console.log(`web served from ${WEB_DIR}`);
 console.log(`catalog served from ${DATA_DIR}catalog.json`);
-console.log(`Sample access codes: ${SHELL_USERS.map((u) => "pasha-shell-" + u.id.replace(/^u_/, "")).join(", ")}`);
+console.log(
+  `Sample access codes: ${
+    SHELL_USERS.map((u) => "pasha-shell-" + u.id.replace(/^u_/, "")).join(", ")
+  }`,
+);
 
 Deno.serve({ port: PORT }, async (req: Request) => {
-  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS_HEADERS });
+  if (req.method === "OPTIONS") {
+    return new Response(null, { status: 204, headers: CORS_HEADERS });
+  }
 
   const url = new URL(req.url);
   const path = url.pathname;
@@ -114,25 +151,99 @@ Deno.serve({ port: PORT }, async (req: Request) => {
     });
   }
 
+  // ----- WhatsApp webhook — no X-Access-Code auth; Meta calls these directly -----
+  // Verification handshake (one-time, when you save the webhook URL in the
+  // Meta App dashboard).
+  if (path === "/api/whatsapp/webhook" && req.method === "GET") {
+    return handleWebhookVerification(url);
+  }
+
+  // Event delivery — every inbound WhatsApp message lands here.
+  if (path === "/api/whatsapp/webhook" && req.method === "POST") {
+    const rawBody = await req.text();
+    const signature = req.headers.get("x-hub-signature-256");
+    const validSig = await verifyWebhookSignature(rawBody, signature);
+    if (!validSig) {
+      console.warn("WhatsApp webhook: invalid or missing signature, rejecting");
+      return json({ error: "invalid_signature" }, 403);
+    }
+
+    let payload: unknown;
+    try {
+      payload = JSON.parse(rawBody);
+    } catch {
+      return json({ error: "invalid_json" }, 400);
+    }
+
+    const inbound = parseWebhookPayload(payload);
+    for (const msg of inbound) {
+      upsertWhatsAppThread(msg);
+    }
+    // Meta requires a fast 200 regardless of processing outcome, or it retries/backs off.
+    return json({ received: inbound.length });
+  }
+
   // Auth required for everything below
   const user = whoami(req);
   if (!user) return json({ error: "unauthorized" }, 401);
   const atoms = effectiveAtoms(user);
 
+  // Send a WhatsApp message — requires the same send permission as other surfaces.
+  if (path === "/api/whatsapp/send" && req.method === "POST") {
+    if (
+      !atoms.has("messages.send.assigned-accounts") &&
+      !atoms.has("messages.send.any-account")
+    ) {
+      return json({
+        error: "forbidden",
+        missing_atom: "messages.send.assigned-accounts",
+      }, 403);
+    }
+    let body: { to?: string; text?: string };
+    try {
+      body = await req.json();
+    } catch {
+      return json({ error: "invalid_json" }, 400);
+    }
+    if (!body.to || !body.text) {
+      return json({ error: "to_and_text_required" }, 400);
+    }
+
+    const result = await sendWhatsAppText(body.to, body.text);
+    if (!result.ok) {
+      return json({ error: "send_failed", detail: result.error }, 502);
+    }
+
+    const thread = WHATSAPP_LIVE_THREADS.find((t) =>
+      t.customer_handle === body.to
+    );
+    if (thread) {
+      thread.last_message_at = new Date().toISOString();
+      thread.last_message_from = "worker";
+      thread.unread = false;
+      thread.preview = `(worker) - ${body.text}`;
+    }
+    return json({ ok: true, message_id: result.message_id });
+  }
+
   // ----- messaging -----
   if (path === "/api/threads" && req.method === "GET") {
     // Filter by permission: own/team/all
-    let threads = SAMPLE_THREADS;
+    let threads = [...SAMPLE_THREADS, ...WHATSAPP_LIVE_THREADS];
     if (!atoms.has("messages.read.all")) {
       if (atoms.has("messages.read.team")) {
         // Workers see threads on accounts they're assigned to OR threads assigned to teammates
         threads = threads.filter((t) =>
-          (user.assigned_accounts || []).includes(t.account_id) || t.worker_id === user.id
+          (user.assigned_accounts || []).includes(t.account_id) ||
+          t.worker_id === user.id
         );
       } else if (atoms.has("messages.read.own")) {
         threads = threads.filter((t) => t.worker_id === user.id);
       } else {
-        return json({ error: "forbidden", missing_atom: "messages.read.own" }, 403);
+        return json(
+          { error: "forbidden", missing_atom: "messages.read.own" },
+          403,
+        );
       }
     }
     return json({ threads });
@@ -144,7 +255,10 @@ Deno.serve({ port: PORT }, async (req: Request) => {
       if (atoms.has("financing.read.applications")) {
         apps = apps.filter((a) => a.worker_id === user.id);
       } else {
-        return json({ error: "forbidden", missing_atom: "financing.read.applications" }, 403);
+        return json({
+          error: "forbidden",
+          missing_atom: "financing.read.applications",
+        }, 403);
       }
     }
     return json({ applications: apps });
@@ -152,22 +266,34 @@ Deno.serve({ port: PORT }, async (req: Request) => {
 
   if (path === "/api/money/ap" && req.method === "GET") {
     if (!atoms.has("money.read.ap-aging")) {
-      return json({ error: "forbidden", missing_atom: "money.read.ap-aging" }, 403);
+      return json(
+        { error: "forbidden", missing_atom: "money.read.ap-aging" },
+        403,
+      );
     }
     return json({ invoices: SAMPLE_AP });
   }
 
   if (path === "/api/money/tax" && req.method === "GET") {
     if (!atoms.has("money.read.tax-obligations")) {
-      return json({ error: "forbidden", missing_atom: "money.read.tax-obligations" }, 403);
+      return json({
+        error: "forbidden",
+        missing_atom: "money.read.tax-obligations",
+      }, 403);
     }
     return json({ obligations: SAMPLE_TAX });
   }
 
   if (path === "/api/dashboard/today" && req.method === "GET") {
     // All authed users get this — but with field filtering by atom
-    const out: Record<string, unknown> = { stats: TODAY_STATS(), trucks: TRUCKS_INBOUND };
-    if (atoms.has("workers.read.team-leaderboard") || atoms.has("workers.read.all-performance")) {
+    const out: Record<string, unknown> = {
+      stats: TODAY_STATS(),
+      trucks: TRUCKS_INBOUND,
+    };
+    if (
+      atoms.has("workers.read.team-leaderboard") ||
+      atoms.has("workers.read.all-performance")
+    ) {
       out.worker_leaderboard = [
         { name: "Paul", messages: 11, conversion: "22%", quality_avg: 4.6 },
         { name: "Carlos", messages: 5, conversion: "30%", quality_avg: 4.4 },
@@ -179,11 +305,15 @@ Deno.serve({ port: PORT }, async (req: Request) => {
 
   // Derived "right now" aggregates — counts pulled from live sample state
   if (path === "/api/dashboard/summary" && req.method === "GET") {
+    const allThreads = [...SAMPLE_THREADS, ...WHATSAPP_LIVE_THREADS];
     const visibleThreads = atoms.has("messages.read.all")
-      ? SAMPLE_THREADS
+      ? allThreads
       : atoms.has("messages.read.team")
-      ? SAMPLE_THREADS.filter((t) => (user.assigned_accounts || []).includes(t.account_id) || t.worker_id === user.id)
-      : SAMPLE_THREADS.filter((t) => t.worker_id === user.id);
+      ? allThreads.filter((t) =>
+        (user.assigned_accounts || []).includes(t.account_id) ||
+        t.worker_id === user.id
+      )
+      : allThreads.filter((t) => t.worker_id === user.id);
 
     const now = Date.now();
     const unreadCount = visibleThreads.filter((t) => t.unread).length;
@@ -193,9 +323,13 @@ Deno.serve({ port: PORT }, async (req: Request) => {
 
     const visibleApps = atoms.has("financing.read.all-applications")
       ? SAMPLE_APPLICATIONS
-      : SAMPLE_APPLICATIONS.filter((a) => a.worker_id === user.id);
+      : SAMPLE_APPLICATIONS.filter((a) =>
+        a.worker_id === user.id
+      );
 
-    const appsInProgress = visibleApps.filter((a) => a.status === "in-progress");
+    const appsInProgress = visibleApps.filter((a) =>
+      a.status === "in-progress"
+    );
     const appsInProgressLabels = appsInProgress.map((a) => {
       const lastAttempt = a.lender_attempts[a.lender_attempts.length - 1];
       return `${a.customer_name.split(" ")[0]} @ ${lastAttempt?.lender || "—"}`;
@@ -218,23 +352,48 @@ Deno.serve({ port: PORT }, async (req: Request) => {
   // POST /api/draft-reply — Drafter agent: takes a thread + product context,
   // returns a draft reply for human review. Requires messages.send.* permission.
   if (path === "/api/draft-reply" && req.method === "POST") {
-    if (!atoms.has("messages.send.assigned-accounts") && !atoms.has("messages.send.any-account")) {
-      return json({ error: "forbidden", missing_atom: "messages.send.assigned-accounts" }, 403);
+    if (
+      !atoms.has("messages.send.assigned-accounts") &&
+      !atoms.has("messages.send.any-account")
+    ) {
+      return json({
+        error: "forbidden",
+        missing_atom: "messages.send.assigned-accounts",
+      }, 403);
     }
-    let body: { thread_id?: string; latest_message?: string; product_match?: any; in_stock?: any };
-    try { body = await req.json(); } catch { return json({ error: "invalid_json" }, 400); }
-    if (!body.latest_message) return json({ error: "latest_message_required" }, 400);
+    let body: {
+      thread_id?: string;
+      latest_message?: string;
+      product_match?: any;
+      in_stock?: any;
+    };
+    try {
+      body = await req.json();
+    } catch {
+      return json({ error: "invalid_json" }, 400);
+    }
+    if (!body.latest_message) {
+      return json({ error: "latest_message_required" }, 400);
+    }
 
     // If thread_id supplied, hydrate context from sample data.
-    let thread = body.thread_id ? SAMPLE_THREADS.find((t) => t.id === body.thread_id) : undefined;
+    let thread = body.thread_id
+      ? [...SAMPLE_THREADS, ...WHATSAPP_LIVE_THREADS].find((t) =>
+        t.id === body.thread_id
+      )
+      : undefined;
 
     // Look up product if we have a thread that matched one
     let productMatch = body.product_match;
     if (!productMatch && thread?.product_slug) {
       try {
-        const catalogText = await Deno.readFile(new URL("../../data/catalog.json", import.meta.url));
+        const catalogText = await Deno.readFile(
+          new URL("../../data/catalog.json", import.meta.url),
+        );
         const catalog = JSON.parse(new TextDecoder().decode(catalogText));
-        const p = (catalog.products || []).find((x: any) => x.slug === thread.product_slug);
+        const p = (catalog.products || []).find((x: any) =>
+          x.slug === thread.product_slug
+        );
         if (p) {
           productMatch = {
             slug: p.slug,
@@ -254,7 +413,13 @@ Deno.serve({ port: PORT }, async (req: Request) => {
       customer_handle: thread?.customer_handle,
       surface: thread?.surface || "mp",
       account_label: thread?.account_label || "Unknown account",
-      thread_history: thread ? [{ from: thread.last_message_from, text: thread.preview, at: thread.last_message_at }] : [],
+      thread_history: thread
+        ? [{
+          from: thread.last_message_from,
+          text: thread.preview,
+          at: thread.last_message_at,
+        }]
+        : [],
       latest_message: body.latest_message,
       product_match: productMatch,
       in_stock: body.in_stock,
