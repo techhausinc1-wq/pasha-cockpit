@@ -26,11 +26,29 @@ import {
   type InboundContext,
 } from "./lib/drafter.ts";
 import {
+  broadcastWhatsAppTemplate,
   handleWebhookVerification,
   parseWebhookPayload,
   sendWhatsAppText,
   verifyWebhookSignature,
 } from "./lib/whatsapp.ts";
+import {
+  type Customer,
+  findOrCreateCustomer,
+  searchCustomers,
+} from "./lib/customers.ts";
+import {
+  createOrder,
+  ordersForCustomer,
+  recordBalancePayment,
+  SAMPLE_ORDERS,
+} from "./lib/orders.ts";
+import {
+  deliveriesByDate,
+  SAMPLE_DELIVERIES,
+  scheduleDelivery,
+  updateDeliveryStatus,
+} from "./lib/deliveries.ts";
 
 const PORT = parseInt(Deno.env.get("PORT") || "8001");
 const WEB_DIR = new URL("../../web/", import.meta.url).pathname;
@@ -178,6 +196,14 @@ Deno.serve({ port: PORT }, async (req: Request) => {
     const inbound = parseWebhookPayload(payload);
     for (const msg of inbound) {
       upsertWhatsAppThread(msg);
+      // Every inbound WhatsApp message creates/updates a customer record —
+      // this is the actual link between "messaging" and "CRM": a thread
+      // alone was never a durable record of who this person is.
+      findOrCreateCustomer({
+        name: msg.name || msg.wa_id,
+        phone: msg.wa_id,
+        whatsapp_id: msg.wa_id,
+      });
     }
     // Meta requires a fast 200 regardless of processing outcome, or it retries/backs off.
     return json({ received: inbound.length });
@@ -455,6 +481,252 @@ Deno.serve({ port: PORT }, async (req: Request) => {
       // future: strip floor_price field from each product
     }
     return json(data);
+  }
+
+  // ----- customers (CRM) -----
+  if (path === "/api/customers" && req.method === "GET") {
+    if (!atoms.has("customers.read")) {
+      return json({ error: "forbidden", missing_atom: "customers.read" }, 403);
+    }
+    const q = url.searchParams.get("q") || "";
+    return json({ customers: searchCustomers(q) });
+  }
+
+  if (path === "/api/customers" && req.method === "POST") {
+    if (!atoms.has("customers.write")) {
+      return json({ error: "forbidden", missing_atom: "customers.write" }, 403);
+    }
+    let body: Partial<Customer>;
+    try {
+      body = await req.json();
+    } catch {
+      return json({ error: "invalid_json" }, 400);
+    }
+    if (!body.name) return json({ error: "name_required" }, 400);
+    const customer = findOrCreateCustomer({
+      name: body.name,
+      phone: body.phone ?? undefined,
+      whatsapp_id: body.whatsapp_id ?? undefined,
+      email: body.email ?? undefined,
+    });
+    return json({ customer });
+  }
+
+  // ----- orders (deposit / balance-due ledger) -----
+  if (path === "/api/orders" && req.method === "GET") {
+    const customerId = url.searchParams.get("customer_id");
+    let orders = customerId ? ordersForCustomer(customerId) : SAMPLE_ORDERS;
+    if (!atoms.has("orders.read.all")) {
+      if (atoms.has("orders.read.own")) {
+        orders = orders.filter((o) => o.worker_id === user.id);
+      } else {
+        return json(
+          { error: "forbidden", missing_atom: "orders.read.own" },
+          403,
+        );
+      }
+    }
+    return json({ orders });
+  }
+
+  if (path === "/api/orders" && req.method === "POST") {
+    if (!atoms.has("orders.write.deposit")) {
+      return json(
+        { error: "forbidden", missing_atom: "orders.write.deposit" },
+        403,
+      );
+    }
+    let body: {
+      customer_id?: string;
+      customer_name?: string;
+      product_slugs?: string[];
+      total_amount?: number;
+      deposit_amount?: number;
+      supplier?: "Crown Mark" | "Happy Homes" | "In stock" | "Other";
+    };
+    try {
+      body = await req.json();
+    } catch {
+      return json({ error: "invalid_json" }, 400);
+    }
+    if (
+      !body.customer_id || !body.customer_name ||
+      !body.product_slugs?.length || body.total_amount == null ||
+      body.deposit_amount == null || !body.supplier
+    ) {
+      return json({
+        error: "missing_fields",
+        required: [
+          "customer_id",
+          "customer_name",
+          "product_slugs",
+          "total_amount",
+          "deposit_amount",
+          "supplier",
+        ],
+      }, 400);
+    }
+    const order = createOrder({
+      customer_id: body.customer_id,
+      customer_name: body.customer_name,
+      product_slugs: body.product_slugs,
+      total_amount: body.total_amount,
+      deposit_amount: body.deposit_amount,
+      supplier: body.supplier,
+      worker_id: user.id,
+    });
+    return json({ order });
+  }
+
+  if (path === "/api/orders/balance" && req.method === "POST") {
+    if (!atoms.has("orders.write.balance")) {
+      return json(
+        { error: "forbidden", missing_atom: "orders.write.balance" },
+        403,
+      );
+    }
+    let body: { order_id?: string; amount?: number };
+    try {
+      body = await req.json();
+    } catch {
+      return json({ error: "invalid_json" }, 400);
+    }
+    if (!body.order_id || body.amount == null) {
+      return json({ error: "order_id_and_amount_required" }, 400);
+    }
+    const order = recordBalancePayment(body.order_id, body.amount);
+    if (!order) return json({ error: "order_not_found" }, 404);
+    return json({ order });
+  }
+
+  // ----- deliveries (routing/scheduling) -----
+  if (path === "/api/deliveries" && req.method === "GET") {
+    if (!atoms.has("deliveries.read")) {
+      return json({ error: "forbidden", missing_atom: "deliveries.read" }, 403);
+    }
+    const date = url.searchParams.get("date");
+    return json({
+      deliveries: date ? deliveriesByDate(date) : SAMPLE_DELIVERIES,
+    });
+  }
+
+  if (path === "/api/deliveries" && req.method === "POST") {
+    if (!atoms.has("deliveries.write.schedule")) {
+      return json({
+        error: "forbidden",
+        missing_atom: "deliveries.write.schedule",
+      }, 403);
+    }
+    let body: {
+      order_id?: string;
+      customer_name?: string;
+      address_area?: string;
+      scheduled_date?: string;
+      route_label?: string;
+      crew?: string;
+      notes?: string;
+    };
+    try {
+      body = await req.json();
+    } catch {
+      return json({ error: "invalid_json" }, 400);
+    }
+    if (
+      !body.order_id || !body.customer_name || !body.address_area ||
+      !body.scheduled_date || !body.route_label
+    ) {
+      return json({
+        error: "missing_fields",
+        required: [
+          "order_id",
+          "customer_name",
+          "address_area",
+          "scheduled_date",
+          "route_label",
+        ],
+      }, 400);
+    }
+    const delivery = scheduleDelivery({
+      order_id: body.order_id,
+      customer_name: body.customer_name,
+      address_area: body.address_area,
+      scheduled_date: body.scheduled_date,
+      route_label: body.route_label,
+      crew: body.crew,
+      notes: body.notes,
+    });
+    return json({ delivery });
+  }
+
+  if (path === "/api/deliveries/status" && req.method === "POST") {
+    if (!atoms.has("deliveries.write.status")) {
+      return json({
+        error: "forbidden",
+        missing_atom: "deliveries.write.status",
+      }, 403);
+    }
+    let body: {
+      id?: string;
+      status?: "scheduled" | "en-route" | "delivered" | "failed";
+    };
+    try {
+      body = await req.json();
+    } catch {
+      return json({ error: "invalid_json" }, 400);
+    }
+    if (!body.id || !body.status) {
+      return json({ error: "id_and_status_required" }, 400);
+    }
+    const delivery = updateDeliveryStatus(body.id, body.status);
+    if (!delivery) return json({ error: "delivery_not_found" }, 404);
+    return json({ delivery });
+  }
+
+  // ----- WhatsApp broadcast — store-wide marketing blast, template-based -----
+  // (must use an approved template if any recipient is outside the 24h
+  // customer-service window — see docs/WHATSAPP-SETUP.md).
+  if (path === "/api/whatsapp/broadcast" && req.method === "POST") {
+    if (!atoms.has("messages.send.broadcast")) {
+      return json({
+        error: "forbidden",
+        missing_atom: "messages.send.broadcast",
+      }, 403);
+    }
+    let body: {
+      customer_ids?: string[];
+      template_name?: string;
+      language_code?: string;
+      body_params?: string[];
+    };
+    try {
+      body = await req.json();
+    } catch {
+      return json({ error: "invalid_json" }, 400);
+    }
+    if (
+      !body.customer_ids?.length || !body.template_name || !body.language_code
+    ) {
+      return json({
+        error: "missing_fields",
+        required: ["customer_ids", "template_name", "language_code"],
+      }, 400);
+    }
+    const idSet = new Set(body.customer_ids);
+    const targets = searchCustomers("")
+      .filter((c) => idSet.has(c.id) && !!c.whatsapp_id)
+      .map((c) => ({
+        to: c.whatsapp_id as string,
+        bodyParams: body.body_params,
+      }));
+    if (targets.length === 0) {
+      return json({ error: "no_recipients_with_whatsapp_id" }, 400);
+    }
+    const result = await broadcastWhatsAppTemplate(
+      targets,
+      body.template_name,
+      body.language_code,
+    );
+    return json(result);
   }
 
   return json({ error: "not_found", path }, 404);

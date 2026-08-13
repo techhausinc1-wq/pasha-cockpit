@@ -51,7 +51,23 @@ export type Atom =
   // Config (master-only by default)
   | "config.tenant"
   | "config.users"
-  | "config.integrations";
+  | "config.integrations"
+  // Customers (CRM)
+  | "customers.read"
+  | "customers.write"
+  // Orders (deposit / balance-due ledger)
+  | "orders.read.own"
+  | "orders.read.all"
+  | "orders.write.deposit"
+  | "orders.write.balance"
+  // Deliveries
+  | "deliveries.read"
+  | "deliveries.write.schedule"
+  | "deliveries.write.status"
+  // Broadcast marketing — separate from messages.send.* since this is a
+  // store-wide action with compliance surface (opt-in, carrier rules),
+  // not a per-thread reply.
+  | "messages.send.broadcast";
 
 export type Role =
   | "owner"
@@ -101,6 +117,16 @@ export const ROLE_ATOMS: Record<Role, Atom[]> = {
     "config.tenant",
     "config.users",
     "config.integrations",
+    "customers.read",
+    "customers.write",
+    "orders.read.own",
+    "orders.read.all",
+    "orders.write.deposit",
+    "orders.write.balance",
+    "deliveries.read",
+    "deliveries.write.schedule",
+    "deliveries.write.status",
+    "messages.send.broadcast",
   ],
   "sales-lead": [
     "messages.read.own",
@@ -126,6 +152,13 @@ export const ROLE_ATOMS: Record<Role, Atom[]> = {
     "thread.mark-won",
     "thread.mark-lost",
     "reports.read.basic",
+    "customers.read",
+    "customers.write",
+    "orders.read.all",
+    "orders.write.deposit",
+    "orders.write.balance",
+    "deliveries.read",
+    "deliveries.write.schedule",
   ],
   "showroom-associate": [
     "messages.read.own",
@@ -141,6 +174,11 @@ export const ROLE_ATOMS: Record<Role, Atom[]> = {
     "thread.mark-won",
     "thread.mark-lost",
     "notifications.lender",
+    "customers.read",
+    "customers.write",
+    "orders.read.own",
+    "orders.write.deposit",
+    "deliveries.read",
   ],
   "bookkeeper": [
     "money.read.ap-aging",
@@ -152,11 +190,16 @@ export const ROLE_ATOMS: Record<Role, Atom[]> = {
     "notifications.supplier",
     "reports.read.financial",
     "reports.read.basic",
+    "customers.read",
+    "orders.read.all",
+    "orders.write.balance",
   ],
   "delivery-driver": [
     "inventory.read",
     "inventory.write.ship",
     "messages.read.own",
+    "deliveries.read",
+    "deliveries.write.status",
   ],
   "read-only": [
     "messages.read.all",
@@ -170,6 +213,9 @@ export const ROLE_ATOMS: Record<Role, Atom[]> = {
     "money.read.daily-sales",
     "reports.read.basic",
     "reports.read.financial",
+    "customers.read",
+    "orders.read.all",
+    "deliveries.read",
   ],
 };
 

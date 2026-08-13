@@ -162,6 +162,95 @@ export async function sendWhatsAppText(
   return { ok: true, message_id: data?.messages?.[0]?.id };
 }
 
+// ----- Template send — required for messaging outside the 24h customer
+// service window (i.e. any broadcast/marketing blast). The template must
+// already be approved in Meta Business Manager; this just invokes it by
+// name. Free-form sendWhatsAppText() only works within 24h of the
+// customer's last inbound message — Meta will reject it otherwise.
+export async function sendWhatsAppTemplate(
+  to: string,
+  templateName: string,
+  languageCode: string,
+  bodyParams: string[] = [],
+): Promise<SendResult> {
+  const token = Deno.env.get("WHATSAPP_TOKEN");
+  const phoneNumberId = Deno.env.get("WHATSAPP_PHONE_NUMBER_ID");
+  if (!token || !phoneNumberId) {
+    return {
+      ok: false,
+      error: "WHATSAPP_TOKEN / WHATSAPP_PHONE_NUMBER_ID not configured",
+    };
+  }
+
+  const res = await fetch(
+    `https://graph.facebook.com/${GRAPH_VERSION}/${phoneNumberId}/messages`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        messaging_product: "whatsapp",
+        to,
+        type: "template",
+        template: {
+          name: templateName,
+          language: { code: languageCode },
+          components: bodyParams.length > 0
+            ? [{
+              type: "body",
+              parameters: bodyParams.map((text) => ({ type: "text", text })),
+            }]
+            : undefined,
+        },
+      }),
+    },
+  );
+
+  if (!res.ok) {
+    return {
+      ok: false,
+      error: `WhatsApp template send ${res.status}: ${await res.text()}`,
+    };
+  }
+  const data = await res.json();
+  return { ok: true, message_id: data?.messages?.[0]?.id };
+}
+
+// ----- Broadcast to many recipients -----
+// Sequential, not parallel — the Cloud API has per-number rate limits and
+// this is small-shop volume (dozens, not thousands), so simplicity wins
+// over throughput here.
+export interface BroadcastTarget {
+  to: string; // phone/wa_id
+  bodyParams?: string[]; // per-recipient template params, e.g. [name, promo]
+}
+
+export interface BroadcastResult {
+  sent: number;
+  failed: Array<{ to: string; error: string }>;
+}
+
+export async function broadcastWhatsAppTemplate(
+  targets: BroadcastTarget[],
+  templateName: string,
+  languageCode: string,
+): Promise<BroadcastResult> {
+  const result: BroadcastResult = { sent: 0, failed: [] };
+  for (const t of targets) {
+    const r = await sendWhatsAppTemplate(
+      t.to,
+      templateName,
+      languageCode,
+      t.bodyParams ?? [],
+    );
+    if (r.ok) result.sent++;
+    else result.failed.push({ to: t.to, error: r.error ?? "unknown error" });
+  }
+  return result;
+}
+
 // Mark a message read (blue ticks) — good practice, not required.
 export async function markWhatsAppRead(messageId: string): Promise<void> {
   const token = Deno.env.get("WHATSAPP_TOKEN");
