@@ -787,9 +787,49 @@ h3 {
   .bar-row { grid-template-columns: 90px 1fr 60px; gap: 6px; }
   .greet-strip { padding: 16px; }
 }
+
+/* login gate -- tap-name then PIN-pad, real /api/login */
+#gate { min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 20px; background: var(--bg); }
+.gate-card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; box-shadow: 0 8px 30px rgba(20,17,13,0.08); padding: 34px 30px; width: 100%; max-width: 380px; text-align: center; }
+.gate-brand-mark { width: 44px; height: 44px; border-radius: 8px; margin: 0 auto 12px; background: linear-gradient(135deg, var(--accent) 0%, var(--primary) 100%); display: flex; align-items: center; justify-content: center; font-family: "Fraunces", Georgia, serif; font-weight: 600; font-size: 20px; color: #fff; }
+.gate-brand { font-family: "Fraunces", Georgia, serif; font-weight: 600; font-size: 21px; }
+.gate-sub { color: var(--dim); font-size: 12.5px; margin: 4px 0 26px; }
+.gate-emp-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
+.gate-emp-btn { display: flex; align-items: center; gap: 10px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface-soft); cursor: pointer; text-align: left; font-weight: 700; font-size: 13px; color: var(--ink); width: 100%; }
+.gate-emp-btn:hover { border-color: var(--primary); }
+.gate-pin-dots { display: flex; gap: 10px; justify-content: center; margin: 22px 0; }
+.gate-pin-dot { width: 13px; height: 13px; border-radius: 50%; border: 1.5px solid var(--border); }
+.gate-pin-dot.filled { background: var(--primary); border-color: var(--primary); }
+.gate-pin-pad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; max-width: 230px; margin: 0 auto; }
+.gate-pin-key { padding: 14px; border-radius: 9px; border: 1px solid var(--border); background: var(--surface-soft); font-size: 17px; font-weight: 700; color: var(--ink); cursor: pointer; }
+.gate-pin-key:hover { border-color: var(--primary); }
+.gate-error { color: var(--danger); font-size: 12px; margin-top: 12px; min-height: 16px; }
+.gate-back { margin-top: 16px; font-size: 12px; color: var(--dim); cursor: pointer; }
+.gate-back:hover { color: var(--ink); }
 </style>
 </head>
 <body>
+
+<div id="gate">
+  <div class="gate-card">
+    <div class="gate-brand-mark">210</div>
+    <div class="gate-brand">210 Cockpit</div>
+    <div class="gate-sub">210 Discount Furniture -- sign in</div>
+
+    <div id="gate-picker">
+      <div class="gate-emp-list" id="gate-emp-list"></div>
+    </div>
+
+    <div id="gate-pin" style="display:none">
+      <div class="gate-pin-dots" id="gate-pin-dots"></div>
+      <div class="gate-pin-pad" id="gate-pin-pad"></div>
+      <div class="gate-error" id="gate-error"></div>
+      <div class="gate-back" onclick="gateBackToPicker()">Back</div>
+    </div>
+  </div>
+</div>
+
+<div id="app" style="display:none">
 
 <header>
   <div class="head-top">
@@ -808,7 +848,7 @@ h3 {
       <span class="notif-bell">🔔</span>
       <span class="notif-label" id="notif-label">ON</span>
     </button>
-    <select class="user-switcher" id="user-switcher" onchange="switchUser(this.value)"></select>
+    <span class="user-chip" id="user-chip" style="display:flex;align-items:center;gap:8px;font-weight:700;font-size:12.5px;"><span id="user-chip-avatar" class="cust-avatar" style="width:26px;height:26px;font-size:11px;"></span><span id="user-chip-name"></span></span><span onclick="gateLogout()" style="margin-left:10px;font-size:11px;color:var(--dim);cursor:pointer;text-decoration:underline;">Log out</span>
   </div>
   <div class="nav-wrap"><nav id="nav"></nav></div>
 </header>
@@ -833,6 +873,8 @@ h3 {
 
 <!-- In-app message-arrival toasts -->
 <div class="toast-container" id="toasts"></div>
+
+</div><!-- #app -->
 
 <!-- Print-only receipt mount point. Populated by printReceipt() then window.print() -->
 <div class="print-receipt" id="print-receipt"></div>
@@ -1732,7 +1774,7 @@ const ACCOUNT_MSGS_YESTERDAY = [
 ];
 
 /* -------- STATE -------- */
-let CURRENT_USER = USERS[0]; // default Paul Nimerovsky
+let CURRENT_USER = null; // set after real login, see LOGIN GATE below
 let CURRENT_VIEW = 'morning';
 let INBOX_FILTER = { platform: 'all', account: 'all', assigned: 'all', loc: 'all' };
 
@@ -1756,13 +1798,10 @@ function setView(v) {
   window.scrollTo(0, 0);
 }
 
-function switchUser(uid) {
-  CURRENT_USER = USERS.find(u => u.id === uid);
-  renderView();
-}
+// switchUser() removed -- identity now comes from the real login gate, see boot() below.
 
 function userCanSee(modPerm) {
-  return CURRENT_USER.perms.includes(modPerm);
+  return CURRENT_USER ? CURRENT_USER.perms.includes(modPerm) : false;
 }
 
 /* -------- NAV -------- */
@@ -1787,8 +1826,11 @@ function renderNav() {
 
 /* -------- USER SWITCHER -------- */
 function renderUserSwitcher() {
-  document.getElementById('user-switcher').innerHTML =
-    USERS.map(u => `<option value="${u.id}" ${u.id === CURRENT_USER.id ? 'selected' : ''}>${u.name} · ${u.role}</option>`).join('');
+  if (!CURRENT_USER) return;
+  var av = document.getElementById('user-chip-avatar');
+  var nm = document.getElementById('user-chip-name');
+  if (av) av.textContent = (CURRENT_USER.avatar || CURRENT_USER.name.charAt(0));
+  if (nm) nm.textContent = CURRENT_USER.name + ' · ' + CURRENT_USER.role;
 }
 
 /* -------- VIEW DISPATCH -------- */
@@ -3787,12 +3829,59 @@ const SCOUT_OPPS = [
   }
 ];
 let SCOUT_FILTER = 'all';
+// Real advertising-venue Scout (item 4) -- GET/POST against the worker,
+// not the SCOUT_OPPS mock array above (that array stays as illustrative
+// starting content). REAL_PROSPECTS holds whatever the server actually
+// has in Deno KV: the 3 seeded real venues plus anything runScoutSearchUI
+// finds via a live Anthropic web search.
+let REAL_PROSPECTS = [];
+let scoutLiveLoaded = false;
+async function loadRealProspects() {
+  try {
+    var res = await api("/api/prospects");
+    REAL_PROSPECTS = res.prospects || [];
+  } catch (e) {
+    REAL_PROSPECTS = [];
+  }
+  scoutLiveLoaded = true;
+}
+async function runScoutSearchUI() {
+  var cat = (SCOUT_FILTER === "all") ? "military" : SCOUT_FILTER;
+  var btn = document.getElementById("scout-search-btn");
+  if (btn) { btn.disabled = true; btn.textContent = "Searching the web..."; }
+  try {
+    var result = await api("/api/scout/search", { method: "POST", body: JSON.stringify({ category: cat }) });
+    await loadRealProspects();
+    renderScout();
+    alert((result.found || 0) + " new real opportunity(ies) found and saved.");
+  } catch (e) {
+    alert("Scout search failed: " + e.message);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "Run Scout search (real web search)"; }
+  }
+}
+function renderScoutLiveSection() {
+  if (!scoutLiveLoaded) {
+    loadRealProspects().then(function() { renderScout(); });
+    return "<div class=\"empty\">Loading real prospects...</div>";
+  }
+  var rows = REAL_PROSPECTS.map(function(p) {
+    var phone = (p.contact && p.contact.phone) ? p.contact.phone : "no phone on file";
+    return "<div class=" + JSON.stringify("row") + "><span class=" + JSON.stringify("lbl") + ">" + p.title + "</span><span class=" + JSON.stringify("val") + " style=" + JSON.stringify("font-size:11px") + ">" + (p.status || "new") + " -- " + phone + "</span></div>";
+  }).join("");
+  var empty = rows ? "" : "<div class=" + JSON.stringify("empty") + ">None saved yet.</div>";
+  var btn = "<button class=" + JSON.stringify("btn primary full") + " id=" + JSON.stringify("scout-search-btn") + " style=" + JSON.stringify("margin-top:10px") + " onclick=" + JSON.stringify("runScoutSearchUI()") + ">Run Scout search (real web search)</button>";
+  return "<div class=" + JSON.stringify("card") + "><div class=" + JSON.stringify("card-head") + "><span class=" + JSON.stringify("card-title") + ">Live prospects (real, from worker KV)</span></div>" + rows + empty + btn + "</div>";
+}
+
+
 function renderScout() {
   let opps = SCOUT_OPPS.slice();
   if (SCOUT_FILTER !== 'all') opps = opps.filter(x => x.cat === SCOUT_FILTER);
   const html = `
     <h3>${t('scout_title')}</h3>
     <p class="lead">${t('scout_intro')}</p>
+    ${renderScoutLiveSection()}
 
     <div class="scroll-x" style="margin-bottom:14px;">
       <div style="display:inline-block;">
@@ -3930,7 +4019,8 @@ function renderReels() {
 
         <div class="card">
           <h2 style="margin-top:0;">${t('reels_step_generate')}</h2>
-          <button class="btn primary full" onclick="alert('Generating reel — would render 15-sec video with photos, theme overlay, voiceover, captions. Demo only.'); ">${t('reels_generate')}</button>
+          <button class="btn primary full" id="reels-generate-btn" onclick="runReelGenerate()">${t('reels_generate')}</button>
+          <div id="reels-generate-result" style="font-size:12px; color:var(--dim); margin-top:8px; white-space:pre-wrap;"></div>
           <div style="display:flex; gap:6px; margin-top:10px;">
             <button class="btn ghost sm" style="flex:1;">${t('reels_publish_fb')}</button>
             <button class="btn ghost sm" style="flex:1;">${t('reels_publish_ig')}</button>
@@ -4028,6 +4118,36 @@ function openReelDetail(id) {
   `);
 }
 
+// Real call to the worker (item 3) -- POST /api/reels/generate. Sends the
+// promo theme + script; the server generates bilingual captions via
+// Anthropic every time, and also starts a real fal.ai video job if a photo
+// was attached and FAL_KEY is configured server-side. This demo UI does
+// not yet wire real photo upload (the numbered squares above are a
+// placeholder), so this call is caption-only -- still a real API call
+// with a real model response, not a fake alert.
+async function runReelGenerate() {
+  var btn = document.getElementById("reels-generate-btn");
+  var out = document.getElementById("reels-generate-result");
+  if (btn) { btn.disabled = true; btn.textContent = "Generating..."; }
+  if (out) out.textContent = "";
+  try {
+    var body = { theme: REEL_STATE.theme, script: REEL_STATE.script || sampleScript(REEL_STATE.theme) };
+    var result = await api("/api/reels/generate", { method: "POST", body: JSON.stringify(body) });
+    if (out) {
+      if (result.captions) {
+        out.textContent = "EN: " + result.captions.en + "\n\nES: " + result.captions.es + "\n\n" + (result.message || "");
+      } else {
+        out.textContent = result.message || "Reel generation started.";
+      }
+    }
+  } catch (e) {
+    if (out) out.textContent = "Reel generation failed: " + e.message;
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = t("reels_generate"); }
+  }
+}
+
+
 function sampleScript(theme) {
   const samples = {
     memorial_day: 'Memorial Day Sale — 25% off all sectionals. No credit needed. This weekend only.',
@@ -4100,34 +4220,50 @@ function togglePerm(uid, perm) {
    ============================================================ */
 const LIVE_CONFIG_KEY = 'pasha_live_config';
 function getLiveConfig() {
-  try {
-    return JSON.parse(localStorage.getItem(LIVE_CONFIG_KEY)) || { apiBase: '', accessCode: '' };
-  } catch {
-    return { apiBase: '', accessCode: '' };
-  }
+  return { apiBase: API_BASE };
 }
-function saveLiveConfig(apiBase, accessCode) {
-  localStorage.setItem(LIVE_CONFIG_KEY, JSON.stringify({ apiBase: apiBase.replace(/\/$/, ''), accessCode }));
+function saveLiveConfig(apiBase) {
+  API_BASE = (apiBase || "").replace(/\/$/, "");
+  localStorage.setItem(API_BASE_KEY, API_BASE);
   renderLive();
 }
-
+let liveAutoLoaded = false;
 let LIVE_DATA = { customers: null, orders: null, deliveries: null, threads: null, error: null, loading: false };
 
+// Facebook/Instagram OAuth connect entry point (item 5) -- see
+// worker/src/lib/meta-oauth.ts. One click sends Pasha to Facebooks own
+// login/consent screen; the callback stores a long-lived Page + IG token
+// server-side. This panel just shows connection status and the button.
+let metaStatus = null;
+async function loadMetaStatus() {
+  try { metaStatus = await api("/api/meta/status"); } catch (e) { metaStatus = { configured: false, connected: false, pages: [] }; }
+}
+function renderMetaConnectSection() {
+  if (metaStatus === null) {
+    loadMetaStatus().then(function() { renderLive(); });
+    return "<div class=" + JSON.stringify("card") + "><div class=" + JSON.stringify("card-head") + "><span class=" + JSON.stringify("card-title") + ">Facebook / Instagram</span></div><div class=" + JSON.stringify("empty") + ">Checking connection...</div></div>";
+  }
+  if (!metaStatus.configured) {
+    return "<div class=" + JSON.stringify("card") + "><div class=" + JSON.stringify("card-head") + "><span class=" + JSON.stringify("card-title") + ">Facebook / Instagram</span></div><div class=" + JSON.stringify("empty") + ">Not configured on this deployment -- see docs/META-BUSINESS-SETUP.md.</div></div>";
+  }
+  if (metaStatus.connected) {
+    var pages = (metaStatus.pages || []).map(function(p) { return p.name + (p.igUsername ? " (IG: " + p.igUsername + ")" : ""); }).join(", ");
+    return "<div class=" + JSON.stringify("card") + "><div class=" + JSON.stringify("card-head") + "><span class=" + JSON.stringify("card-title") + ">Facebook / Instagram</span></div><div class=" + JSON.stringify("row") + ">Connected: " + pages + "</div></div>";
+  }
+  var connectUrl = "/oauth/facebook/start?token=" + encodeURIComponent(SESSION_TOKEN || "");
+  return "<div class=" + JSON.stringify("card") + "><div class=" + JSON.stringify("card-head") + "><span class=" + JSON.stringify("card-title") + ">Facebook / Instagram</span></div><a class=" + JSON.stringify("btn primary full") + " href=" + JSON.stringify(connectUrl) + " style=" + JSON.stringify("display:block; text-align:center; text-decoration:none;") + ">Connect Facebook Business</a></div>";
+}
+
+
 async function liveFetch(path, opts) {
-  const { apiBase, accessCode } = getLiveConfig();
-  if (!apiBase) throw new Error('no_api_base');
-  const res = await fetch(apiBase + path, {
-    ...opts,
-    headers: { 'X-Access-Code': accessCode, 'Content-Type': 'application/json', ...(opts?.headers || {}) },
-  });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || `http_${res.status}`);
-  return data;
+  // Delegates to the real session-authed api() helper (see LOGIN GATE) --
+  // this tab used to carry its own separate X-Access-Code config because
+  // the old shell auth was per-panel; now that the whole app is gated by a
+  // real login, Live Ops just reuses that same session.
+  return api(path, opts);
 }
 
 async function refreshLiveData() {
-  const { apiBase } = getLiveConfig();
-  if (!apiBase) { LIVE_DATA.error = 'no_api_base'; renderLive(); return; }
   LIVE_DATA.loading = true; LIVE_DATA.error = null; renderLive();
   try {
     const [customers, orders, deliveries, threads] = await Promise.all([
@@ -4174,45 +4310,39 @@ function renderLive() {
   const configHtml = `
     <div class="card" style="background:var(--surface-soft); border-style:dashed;">
       <div class="card-head"><span class="card-title">Worker connection</span></div>
-      <div class="field"><label class="field-lbl">Worker URL (e.g. https://pasha-cockpit.deno.dev)</label>
+      <div style="font-size:12px; color:var(--dim); margin-bottom:10px;">Authenticated via your real login -- override only needed on a separate static host.</div>
+      <div class="field"><label class="field-lbl">Worker URL override (optional)</label>
         <input class="input" id="live-api-base" placeholder="https://..." value="${cfg.apiBase}">
       </div>
-      <div class="field"><label class="field-lbl">Access code (pasha-shell-&lt;your id&gt;)</label>
-        <input class="input" id="live-access-code" placeholder="pasha-shell-paul" value="${cfg.accessCode}">
-      </div>
-      <button class="btn primary" onclick="saveLiveConfig(document.getElementById('live-api-base').value, document.getElementById('live-access-code').value); refreshLiveData();">Save &amp; connect</button>
+      <button class="btn ghost" onclick="saveLiveConfig(document.getElementById(&apos;live-api-base&apos;).value); refreshLiveData();">Save override &amp; reload</button>
     </div>
+    ${renderMetaConnectSection()}
   `;
 
-  if (!cfg.apiBase) {
-    document.getElementById('view-live').innerHTML = `
-      <h3>Live Ops</h3>
-      <p class="lead">Real WhatsApp threads, customer records, deposits, and deliveries — not demo data. Set the worker URL below once it's deployed.</p>
-      ${configHtml}
-    `;
-    return;
+  if (!liveAutoLoaded) {
+    liveAutoLoaded = true;
+    refreshLiveData();
   }
 
   if (LIVE_DATA.loading) {
-    document.getElementById('view-live').innerHTML = `<h3>Live Ops</h3>${configHtml}<div class="empty">Loading…</div>`;
+    document.getElementById("view-live").innerHTML = `<h3>Live Ops</h3>${configHtml}<div class="empty">Loading...</div>`;
     return;
   }
 
   if (LIVE_DATA.error) {
-    document.getElementById('view-live').innerHTML = `
+    document.getElementById("view-live").innerHTML = `
       <h3>Live Ops</h3>${configHtml}
-      <div class="card attn"><div class="card-title">Couldn't reach the worker</div>
-      <div style="font-size:12px; margin-top:6px;">${LIVE_DATA.error} — check the URL and access code above, and that the worker is actually deployed and running.</div></div>
+      <div class="card attn"><div class="card-title">Could not reach the worker</div>
+      <div style="font-size:12px; margin-top:6px;">${LIVE_DATA.error}</div></div>
       <button class="btn ghost" onclick="refreshLiveData()">Retry</button>
     `;
     return;
   }
 
   if (LIVE_DATA.customers === null) {
-    document.getElementById('view-live').innerHTML = `${configHtml}<button class="btn primary full" onclick="refreshLiveData()">Load live data</button>`;
+    document.getElementById("view-live").innerHTML = `${configHtml}<button class="btn primary full" onclick="refreshLiveData()">Load live data</button>`;
     return;
   }
-
   const html = `
     <h3>Live Ops</h3>
     ${configHtml}
@@ -4393,17 +4523,197 @@ function simulateIncomingMessage() {
 }
 
 /* -------- BOOT + PWA -------- */
-function boot() {
+/* ============================================================
+   LOGIN GATE -- real PIN auth against POST /api/login, replacing the old
+   demo USERS-switcher perspective toggle. Same tap-name-then-PIN-pad shape
+   as feliks-valet-cockpit/web/index.html. Session token persisted in
+   localStorage so a reload does not force a re-login; GET /api/me
+   revalidates it on boot. API_BASE defaults to same-origin (this file is
+   now served by the worker itself, see worker/src/main.ts WEB_DIR) but
+   can be overridden for a cross-origin GitHub Pages deploy.
+   ============================================================ */
+const API_BASE_KEY = "pasha_api_base";
+const SESSION_KEY = "pasha_session_token";
+let API_BASE = localStorage.getItem(API_BASE_KEY) || "";
+let SESSION_TOKEN = null;
+
+async function api(path, opts) {
+  opts = opts || {};
+  const headers = Object.assign({ "Content-Type": "application/json" }, opts.headers || {});
+  if (SESSION_TOKEN) headers.Authorization = "Bearer " + SESSION_TOKEN;
+  const res = await fetch(API_BASE + path, Object.assign({}, opts, { headers }));
+  if (res.status === 401) { gateLogout(); throw new Error("Session expired -- please log in again."); }
+  const text = await res.text();
+  let data; try { data = text ? JSON.parse(text) : {}; } catch (e) { data = {}; }
+  if (!res.ok) throw new Error(data.error || ("HTTP " + res.status));
+  return data;
+}
+
+// Real backend roles (worker/src/lib/rbac.ts ROLE_ATOMS) mapped onto the
+// legacy perms vocabulary this shell UI already gates every view on
+// (userCanSee(...)). The server is the actual boundary (every /api/* route
+// checks the real atom); this mapping only drives which demo panels show,
+// same "UI convenience, not the boundary" split feliks-valet-cockpit uses.
+const ROLE_LEGACY_PERMS = {};
+ROLE_LEGACY_PERMS.owner = [];
+ROLE_LEGACY_PERMS.owner.push("inbox_all");
+ROLE_LEGACY_PERMS.owner.push("inventory_read");
+ROLE_LEGACY_PERMS.owner.push("inventory_write");
+ROLE_LEGACY_PERMS.owner.push("customers");
+ROLE_LEGACY_PERMS.owner.push("customers_email");
+ROLE_LEGACY_PERMS.owner.push("ads");
+ROLE_LEGACY_PERMS.owner.push("team");
+ROLE_LEGACY_PERMS.owner.push("money");
+ROLE_LEGACY_PERMS.owner.push("reviews");
+ROLE_LEGACY_PERMS["sales-lead"] = [];
+ROLE_LEGACY_PERMS["sales-lead"].push("inbox_all");
+ROLE_LEGACY_PERMS["sales-lead"].push("inventory_read");
+ROLE_LEGACY_PERMS["sales-lead"].push("inventory_write");
+ROLE_LEGACY_PERMS["sales-lead"].push("customers");
+ROLE_LEGACY_PERMS["sales-lead"].push("customers_email");
+ROLE_LEGACY_PERMS["sales-lead"].push("ads");
+ROLE_LEGACY_PERMS["sales-lead"].push("reviews");
+ROLE_LEGACY_PERMS["showroom-associate"] = [];
+ROLE_LEGACY_PERMS["showroom-associate"].push("inbox_assigned");
+ROLE_LEGACY_PERMS["showroom-associate"].push("inventory_read");
+ROLE_LEGACY_PERMS["showroom-associate"].push("customers");
+ROLE_LEGACY_PERMS["showroom-associate"].push("reviews");
+ROLE_LEGACY_PERMS["bookkeeper"] = [];
+ROLE_LEGACY_PERMS["bookkeeper"].push("customers");
+ROLE_LEGACY_PERMS["bookkeeper"].push("money");
+ROLE_LEGACY_PERMS["bookkeeper"].push("reviews");
+ROLE_LEGACY_PERMS["delivery-driver"] = [];
+ROLE_LEGACY_PERMS["delivery-driver"].push("inventory_read");
+ROLE_LEGACY_PERMS["read-only"] = [];
+ROLE_LEGACY_PERMS["read-only"].push("inbox_all");
+ROLE_LEGACY_PERMS["read-only"].push("inventory_read");
+ROLE_LEGACY_PERMS["read-only"].push("customers");
+ROLE_LEGACY_PERMS["read-only"].push("money");
+ROLE_LEGACY_PERMS["read-only"].push("reviews");
+
+// Picker shown on the gate -- names/avatars/roles only, no PIN. Mirrors
+// worker/src/lib/rbac.ts SHELL_USERS (the real seeded login accounts).
+// The PIN typed on the next screen is what actually authenticates against
+// POST /api/login.
+const LOGIN_PICKER = [];
+LOGIN_PICKER.push({ id: "u_paul", name: "Paul (Pasha)", avatar: "P" });
+LOGIN_PICKER.push({ id: "u_ivan", name: "Ivan (advisor)", avatar: "I" });
+LOGIN_PICKER.push({ id: "u_rick", name: "Rick (Sales Lead)", avatar: "R" });
+LOGIN_PICKER.push({ id: "u_carlos", name: "Carlos", avatar: "C" });
+LOGIN_PICKER.push({ id: "u_nick", name: "Nick", avatar: "N" });
+
+let gatePinBuffer = "";
+let gatePinTarget = null;
+
+function renderGatePicker() {
+  document.getElementById("gate-emp-list").innerHTML = LOGIN_PICKER.map(function(u) {
+    return `<button class="gate-emp-btn" onclick="gatePickEmployee(${JSON.stringify(u.id)})">${u.avatar} -- ${u.name}</button>`;
+  }).join("");
+}
+
+function gatePickEmployee(id) {
+  gatePinTarget = id;
+  gatePinBuffer = "";
+  document.getElementById("gate-picker").style.display = "none";
+  document.getElementById("gate-pin").style.display = "block";
+  document.getElementById("gate-error").textContent = "";
+  renderGatePinDots();
+  var keys = ["1","2","3","4","5","6","7","8","9","","0","del"];
+  document.getElementById("gate-pin-pad").innerHTML = keys.map(function(k) {
+    if (k === "") return "<div></div>";
+    var label = k === "del" ? "&larr;" : k;
+    return `<button type="button" class="gate-pin-key" onclick="gatePinPress(${JSON.stringify(k)})">${label}</button>`;
+  }).join("");
+}
+
+function gateBackToPicker() {
+  document.getElementById("gate-picker").style.display = "block";
+  document.getElementById("gate-pin").style.display = "none";
+}
+
+function renderGatePinDots() {
+  var dots = [0, 1, 2, 3];
+  document.getElementById("gate-pin-dots").innerHTML = dots.map(function(i) {
+    var filled = i < gatePinBuffer.length ? " filled" : "";
+    return "<div class=" + JSON.stringify("gate-pin-dot" + filled) + "></div>";
+  }).join("");
+}
+
+async function gatePinPress(k) {
+  if (k === "del") { gatePinBuffer = gatePinBuffer.slice(0, -1); renderGatePinDots(); return; }
+  if (gatePinBuffer.length >= 4) return;
+  gatePinBuffer += k;
+  renderGatePinDots();
+  if (gatePinBuffer.length === 4) {
+    try {
+      var res = await fetch(API_BASE + "/api/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: gatePinTarget, pin: gatePinBuffer }) });
+      var data = await res.json().catch(function() { return {}; });
+      if (!res.ok) throw new Error(data.error || "Incorrect PIN");
+      SESSION_TOKEN = data.token;
+      localStorage.setItem(SESSION_KEY, SESSION_TOKEN);
+      applyLoggedInUser(data.user, data.atoms);
+      await enterApp();
+    } catch (e) {
+      document.getElementById("gate-error").textContent = "Incorrect PIN";
+      gatePinBuffer = "";
+      renderGatePinDots();
+    }
+  }
+}
+
+// Real atoms from the server drive CURRENT_USER.perms via the legacy
+// mapping above -- CURRENT_USER.atoms is also kept for any new code that
+// wants to check a real atom directly instead of a legacy perm string.
+function applyLoggedInUser(serverUser, atoms) {
+  var legacyPerms = ROLE_LEGACY_PERMS[serverUser.role] || [];
+  CURRENT_USER = {
+    id: serverUser.id,
+    name: serverUser.name,
+    role: serverUser.role,
+    avatar: serverUser.name.charAt(0),
+    perms: legacyPerms,
+    atoms: atoms || [],
+  };
+}
+
+function gateLogout() {
+  if (SESSION_TOKEN) { api("/api/logout", { method: "POST" }).catch(function() {}); }
+  localStorage.removeItem(SESSION_KEY);
+  SESSION_TOKEN = null;
+  CURRENT_USER = null;
+  location.reload();
+}
+
+async function enterApp() {
+  document.getElementById("gate").style.display = "none";
+  document.getElementById("app").style.display = "block";
   renderUserSwitcher();
   renderNav();
   renderView();
-  // Force brand-sub to match the active language at boot (the HTML default is
-  // only the English fallback for the first paint before JS runs).
-  const sub = document.getElementById('brand-sub');
-  if (sub) sub.textContent = t('brand_sub');
+  var sub = document.getElementById("brand-sub");
+  if (sub) sub.textContent = t("brand_sub");
   paintNotifyButton();
 }
-boot();
+
+async function gateBoot() {
+  renderGatePicker();
+  var saved = localStorage.getItem(SESSION_KEY);
+  if (saved) {
+    SESSION_TOKEN = saved;
+    try {
+      var me = await api("/api/me");
+      applyLoggedInUser(me.user, me.atoms);
+      await enterApp();
+      return;
+    } catch (e) {
+      localStorage.removeItem(SESSION_KEY);
+      SESSION_TOKEN = null;
+    }
+  }
+  // gate stays visible, showing the picker
+}
+
+gateBoot();
 
 // Service worker registration — enables offline + install prompt
 if ('serviceWorker' in navigator) {

@@ -1,16 +1,10 @@
-// Outbound customer delivery scheduling/routing — the operational half of
-// the "$79 flat delivery anywhere in San Antonio" promise the Drafter
-// already makes in every reply. Furniture Wizard, MicroBiz, Upper, and
-// Locate2u all treat truck/crew-assigned delivery routing as a base
-// feature; this cockpit had none before.
-//
-// Kept deliberately simple for the shell: a delivery is scheduled for a
-// date and grouped under a route_label (e.g. "North" / "South") so a
-// dispatcher can eyeball who's on which truck that day — real
-// distance-based route optimization is a later-phase upgrade, not a
-// blocker for getting this operationally useful today.
+// Outbound customer delivery scheduling/routing. Real Deno KV persistence
+// -- replaces the process-memory SAMPLE_DELIVERIES array.
 
+import { kvGet, kvList, kvSet, nanoid } from "./kv.ts";
 import { findOrderById } from "./orders.ts";
+
+const RES = "deliveries";
 
 export type DeliveryStatus = "scheduled" | "en-route" | "delivered" | "failed";
 
@@ -18,44 +12,51 @@ export interface Delivery {
   id: string;
   order_id: string;
   customer_name: string;
-  address_area: string; // neighborhood/zip label — no geocoding in the shell
+  address_area: string;
   scheduled_date: string; // YYYY-MM-DD
-  route_label: string; // dispatcher-assigned grouping, e.g. "Route A - North"
+  route_label: string;
   crew: string | null;
   status: DeliveryStatus;
   notes: string | null;
   created_at: string;
   updated_at: string;
+  _ord: number;
 }
 
-export const SAMPLE_DELIVERIES: Delivery[] = [
-  {
+export function seedDeliveries(): Delivery[] {
+  const now = Date.now();
+  const list: Delivery[] = [];
+  list.push({
     id: "d_1",
     order_id: "o_1",
     customer_name: "Joel Bryant",
     address_area: "Converse, TX",
-    scheduled_date: new Date(Date.now() + 3 * 86400000).toISOString().slice(
-      0,
-      10,
-    ),
+    scheduled_date: new Date(now + 3 * 86400000).toISOString().slice(0, 10),
     route_label: "Route A - Northeast",
     crew: "Manny & Deo",
     status: "scheduled",
-    notes: "2nd floor apt, no elevator — confirm crew size before dispatch.",
-    created_at: new Date(Date.now() - 20 * 60 * 1000).toISOString(),
-    updated_at: new Date(Date.now() - 20 * 60 * 1000).toISOString(),
-  },
-];
-
-export function findDeliveryById(id: string): Delivery | undefined {
-  return SAMPLE_DELIVERIES.find((d) => d.id === id);
+    notes: "2nd floor apt, no elevator -- confirm crew size before dispatch.",
+    created_at: new Date(now - 20 * 60 * 1000).toISOString(),
+    updated_at: new Date(now - 20 * 60 * 1000).toISOString(),
+    _ord: now,
+  });
+  return list;
 }
 
-export function deliveriesByDate(date: string): Delivery[] {
-  return SAMPLE_DELIVERIES.filter((d) => d.scheduled_date === date);
+export async function listDeliveries(): Promise<Delivery[]> {
+  return kvList<Delivery>(RES);
 }
 
-export function scheduleDelivery(input: {
+export async function findDeliveryById(id: string): Promise<Delivery | null> {
+  return kvGet<Delivery>(RES, id);
+}
+
+export async function deliveriesByDate(date: string): Promise<Delivery[]> {
+  const all = await kvList<Delivery>(RES);
+  return all.filter((d) => d.scheduled_date === date);
+}
+
+export async function scheduleDelivery(input: {
   order_id: string;
   customer_name: string;
   address_area: string;
@@ -63,13 +64,13 @@ export function scheduleDelivery(input: {
   route_label: string;
   crew?: string | null;
   notes?: string | null;
-}): Delivery {
-  // Validate the order exists so a delivery can't silently reference
-  // nothing — doesn't hard-fail the caller, just leaves it uncoupled.
-  findOrderById(input.order_id);
+}): Promise<Delivery> {
+  // Validate the order exists so a delivery cannot silently reference
+  // nothing -- does not hard-fail the caller, just leaves it uncoupled.
+  await findOrderById(input.order_id);
   const now = new Date().toISOString();
   const delivery: Delivery = {
-    id: `d_${Date.now()}_${Math.floor(Math.random() * 1000)}`,
+    id: "d_" + nanoid(12),
     order_id: input.order_id,
     customer_name: input.customer_name,
     address_area: input.address_area,
@@ -80,18 +81,23 @@ export function scheduleDelivery(input: {
     notes: input.notes ?? null,
     created_at: now,
     updated_at: now,
+    _ord: Date.now(),
   };
-  SAMPLE_DELIVERIES.push(delivery);
+  await kvSet(RES, delivery.id, delivery);
   return delivery;
 }
 
-export function updateDeliveryStatus(
-  id: string,
-  status: DeliveryStatus,
-): Delivery | null {
-  const d = findDeliveryById(id);
+export async function updateDeliveryStatus(id: string, status: DeliveryStatus): Promise<Delivery | null> {
+  const d = await findDeliveryById(id);
   if (!d) return null;
   d.status = status;
   d.updated_at = new Date().toISOString();
+  await kvSet(RES, d.id, d);
   return d;
+}
+
+export async function seedDeliveriesIfEmpty(): Promise<void> {
+  const existing = await kvList<Delivery>(RES);
+  if (existing.length > 0) return;
+  for (const d of seedDeliveries()) await kvSet(RES, d.id, d);
 }

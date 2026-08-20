@@ -67,7 +67,14 @@ export type Atom =
   // Broadcast marketing — separate from messages.send.* since this is a
   // store-wide action with compliance surface (opt-in, carrier rules),
   // not a per-thread reply.
-  | "messages.send.broadcast";
+  | "messages.send.broadcast"
+  // Reels/video generator (item 3)
+  | "reels.write"
+  // Advertising-venue Scout (item 4)
+  | "scout.read"
+  | "scout.write"
+  // Ad-spend/ROI dashboards (item 6)
+  | "ads.read";
 
 export type Role =
   | "owner"
@@ -127,6 +134,10 @@ export const ROLE_ATOMS: Record<Role, Atom[]> = {
     "deliveries.write.schedule",
     "deliveries.write.status",
     "messages.send.broadcast",
+    "reels.write",
+    "scout.read",
+    "scout.write",
+    "ads.read",
   ],
   "sales-lead": [
     "messages.read.own",
@@ -159,6 +170,9 @@ export const ROLE_ATOMS: Record<Role, Atom[]> = {
     "orders.write.balance",
     "deliveries.read",
     "deliveries.write.schedule",
+    "reels.write",
+    "scout.read",
+    "scout.write",
   ],
   "showroom-associate": [
     "messages.read.own",
@@ -179,6 +193,7 @@ export const ROLE_ATOMS: Record<Role, Atom[]> = {
     "orders.read.own",
     "orders.write.deposit",
     "deliveries.read",
+    "reels.write",
   ],
   "bookkeeper": [
     "money.read.ap-aging",
@@ -227,6 +242,7 @@ export interface User {
   assigned_accounts?: string[]; // Marketplace/Page/IG account IDs
   custom_overrides?: { added: Atom[]; removed: Atom[] }; // grants/revokes on top of role template
   is_master: boolean; // owner-level (Ivan, Paul)
+  pin: string; // 4-digit plaintext login PIN
 }
 
 export function effectiveAtoms(user: User): Set<Atom> {
@@ -246,6 +262,7 @@ export function userCan(user: User, atom: Atom): boolean {
 export const SHELL_USERS: User[] = [
   {
     id: "u_paul",
+    pin: "1001",
     name: "Paul (Pasha)",
     role: "owner",
     email: "besthomefurnituresa@gmail.com",
@@ -260,6 +277,7 @@ export const SHELL_USERS: User[] = [
   },
   {
     id: "u_ivan",
+    pin: "1002",
     name: "Ivan (advisor)",
     role: "owner",
     email: "techhausinc1@gmail.com",
@@ -274,6 +292,7 @@ export const SHELL_USERS: User[] = [
   },
   {
     id: "u_rick",
+    pin: "2001",
     name: "Rick (Sales Lead)",
     role: "sales-lead",
     is_master: false,
@@ -281,6 +300,7 @@ export const SHELL_USERS: User[] = [
   },
   {
     id: "u_carlos",
+    pin: "3001",
     name: "Carlos",
     role: "showroom-associate",
     is_master: false,
@@ -288,6 +308,7 @@ export const SHELL_USERS: User[] = [
   },
   {
     id: "u_nick",
+    pin: "3002",
     name: "Nick",
     role: "showroom-associate",
     is_master: false,

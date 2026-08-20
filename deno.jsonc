@@ -1,0 +1,7 @@
+{
+  "deploy": {
+    "org": "techhausinc1",
+    "app": "pasha-cockpit"
+  }
+}
+

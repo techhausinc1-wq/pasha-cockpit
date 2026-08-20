@@ -69,16 +69,24 @@ isn't affected by this.
    **https://business.facebook.com/**, under the business that owns the 5
    Pages, add this app under **Business Settings → Accounts → Apps**, and
    assign it access to all 5 Pages + their linked IG Business accounts.
-4. Set env vars on whichever worker will host this (either extend Igor
-   HQ's shared worker with a new `/pasha/*` tenant prefix, matching the
-   existing pattern used for Kostya Studio and Modern Line Furniture, or
-   give the cockpit its own worker):
+4. **Decision made (2026-08-18): pasha-cockpit gets its own worker** for
+   this, not a new `/pasha/*` tenant on Igor HQ's shared worker. Reasons:
+   pasha-cockpit already has its own separately-deployed worker and its
+   own Deno KV namespace (see `worker/src/lib/kv.ts`) as of this build --
+   keeping the OAuth token colocated with the rest of Pasha's data avoids
+   a cross-worker dependency on Igor's infrastructure. The route shapes,
+   scopes, and token-exchange logic are copied from igor-hq/worker/main.ts
+   (the same proven pattern), just hosted here instead. See
+   `worker/src/lib/meta-oauth.ts` for the implementation. Set on the
+   pasha-cockpit worker's own env:
    - `META_APP_ID`
    - `META_APP_SECRET`
-5. Pasha (or whoever is admin on all 5 Pages) visits
-   `/oauth/facebook/start?code=<access-code>` once. Approves the consent
-   screen. The callback stores a long-lived Page access token for every
-   Page + linked IG account automatically.
+5. Pasha (or whoever is admin on all 5 Pages) logs in once and visits
+   `GET /oauth/facebook/start?token=<his session token>` (the cockpit's
+   frontend does this automatically from a button in the Live Ops tab
+   once logged in -- see `renderMetaConnectSection()` in docs/index.html).
+   Approves the Facebook consent screen. The callback stores a long-lived
+   Page access token for every Page + linked IG account automatically.
 
 At this point: posting reels/promos from the Videos tab, and any
 "Publish to Facebook/Instagram" button, can go live for real.
