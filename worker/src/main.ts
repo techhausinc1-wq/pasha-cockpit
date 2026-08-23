@@ -89,7 +89,12 @@ import { publishToTikTok, tiktokConfigured } from "./lib/tiktok.ts";
 
 const PORT = parseInt(Deno.env.get("PORT") || "8001");
 const WEB_DIR = new URL("../../docs/", import.meta.url).pathname;
-const DATA_DIR = new URL("../../data/", import.meta.url).pathname;
+// data/ lives INSIDE worker/ (worker/data/), not at the repo root -- `deno
+// deploy` uploads only the tree rooted at worker/ (per worker/deno.json),
+// so a repo-root data/ dir silently never reaches production. Confirmed
+// live: /api/catalog was returning Internal Server Error in prod despite
+// working locally, because Deno.readFile couldn't find the file at all.
+const DATA_DIR = new URL("../data/", import.meta.url).pathname;
 const PUBLIC_URL = (Deno.env.get("PUBLIC_URL") ?? "").replace(/\/$/, "");
 
 const CORS_HEADERS = {
@@ -457,7 +462,7 @@ Deno.serve({ port: PORT }, async (req: Request) => {
     let productMatch = body.product_match;
     if (!productMatch && thread?.product_slug) {
       try {
-        const catalogText = await Deno.readFile(new URL("../../data/catalog.json", import.meta.url));
+        const catalogText = await Deno.readFile(new URL("../data/catalog.json", import.meta.url));
         const catalog = JSON.parse(new TextDecoder().decode(catalogText));
         // deno-lint-ignore no-explicit-any
         const p = (catalog.products || []).find((x: any) => x.slug === thread.product_slug);
