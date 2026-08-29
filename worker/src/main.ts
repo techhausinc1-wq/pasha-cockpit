@@ -88,12 +88,13 @@ import { adPlatformsConfigured, getGoogleAdInsights, getMetaAdInsights, getTikTo
 import { publishToTikTok, tiktokConfigured } from "./lib/tiktok.ts";
 
 const PORT = parseInt(Deno.env.get("PORT") || "8001");
-const WEB_DIR = new URL("../../docs/", import.meta.url).pathname;
-// data/ lives INSIDE worker/ (worker/data/), not at the repo root -- `deno
-// deploy` uploads only the tree rooted at worker/ (per worker/deno.json),
-// so a repo-root data/ dir silently never reaches production. Confirmed
-// live: /api/catalog was returning Internal Server Error in prod despite
-// working locally, because Deno.readFile couldn't find the file at all.
+// web/data live INSIDE worker/ (worker/docs/, worker/data/), not at the
+// repo root -- `deno deploy` uploads only the tree rooted at worker/ (per
+// worker/deno.json), so a repo-root sibling dir silently never reaches
+// production. Confirmed live: GET / and /api/catalog both 404'd in prod
+// despite working locally, because Deno.readFile couldn't find either
+// directory at all -- same root cause, same fix, for both.
+const WEB_DIR = new URL("../docs/", import.meta.url).pathname;
 const DATA_DIR = new URL("../data/", import.meta.url).pathname;
 const PUBLIC_URL = (Deno.env.get("PUBLIC_URL") ?? "").replace(/\/$/, "");
 
