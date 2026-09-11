@@ -3980,7 +3980,19 @@ const RECENT_REELS = [
   { id: 'r2', sku: 'MATT-K-PT', theme: 'memorial_day', title: 'King Pillow-Top · Memorial Day 25% off', when: '6 days ago', views: 12300, leads: 38, plat: ['fb','ig','tt'] },
   { id: 'r3', sku: 'BED-0427', theme: 'new_arrival', title: 'Just arrived · Dresser & Mirror Set', when: '11 days ago', views: 2140, leads: 5, plat: ['fb','ig'] }
 ];
-let REEL_STATE = { photos: 4, theme: 'no_credit', script: '', captions: null };
+let REEL_STATE = { photos: 4, theme: 'no_credit', script: '', captions: null, uploadedImage: null, videoUrl: null, videoStage: null };
+function handleReelPhotoUpload(event) {
+  var file = event.target.files && event.target.files[0];
+  if (!file) return;
+  var reader = new FileReader();
+  reader.onload = function(e) {
+    REEL_STATE.uploadedImage = e.target.result;
+    REEL_STATE.videoUrl = null;
+    REEL_STATE.videoStage = null;
+    renderReels();
+  };
+  reader.readAsDataURL(file);
+}
 function renderReels() {
   const html = `
     <h3>${t('reels')}</h3>
@@ -3990,15 +4002,16 @@ function renderReels() {
       <div>
         <div class="card">
           <h2 style="margin-top:0;">${t('reels_step_photos')}</h2>
-          <div style="border: 1.5px dashed var(--border); border-radius: 10px; padding: 28px 14px; text-align:center; background: var(--surface-soft);">
-            <div style="font-family:var(--serif); font-size:34px; color:var(--primary); margin-bottom:6px;">+</div>
-            <div style="font-size:13px; color:var(--dim); margin-bottom:10px;">${t('reels_upload_hint')}</div>
-            <div style="display:flex; gap:6px; justify-content:center; flex-wrap:wrap; margin-top:10px;">
-              ${Array.from({length: REEL_STATE.photos}).map((_,i) => `
-                <div style="width:54px; height:54px; border-radius:6px; background: linear-gradient(135deg, hsl(${i*60},40%,70%) 0%, hsl(${i*60+30},40%,55%) 100%); display:flex; align-items:center; justify-content:center; color:white; font-family:var(--serif); font-size:14px;">${i+1}</div>
-              `).join('')}
-            </div>
-            <div style="font-size:11px; color:var(--dim); font-family:var(--mono); margin-top:10px;">${REEL_STATE.photos}/8 photos</div>
+          <div style="border: 1.5px dashed var(--border); border-radius: 10px; padding: 28px 14px; text-align:center; background: var(--surface-soft); cursor:pointer;" onclick="document.getElementById('reel-photo-input').click()">
+            <input type="file" id="reel-photo-input" accept="image/*" style="display:none;" onchange="handleReelPhotoUpload(event)">
+            ${REEL_STATE.uploadedImage ? `
+              <img src="${REEL_STATE.uploadedImage}" style="max-width:100%; max-height:180px; border-radius:8px; object-fit:cover;">
+              <div style="font-size:12px; color:var(--dim); margin-top:10px;">Tap to replace photo</div>
+            ` : `
+              <div style="font-family:var(--serif); font-size:34px; color:var(--primary); margin-bottom:6px;">+</div>
+              <div style="font-size:13px; color:var(--dim); margin-bottom:10px;">${t('reels_upload_hint')}</div>
+              <div style="font-size:11px; color:var(--dim); font-family:var(--mono); margin-top:10px;">Tap to choose a real photo from this device</div>
+            `}
           </div>
         </div>
 
@@ -4032,23 +4045,37 @@ function renderReels() {
 
       <div>
         <div style="display:flex; justify-content:center; margin-bottom:12px;">
-          <div style="width:260px; aspect-ratio: 9/16; background: linear-gradient(180deg, #2a1f15 0%, #1a1410 100%); position:relative; display:flex; flex-direction:column; justify-content:space-between; padding:16px; border-radius:24px; color:white; box-shadow: 0 10px 30px rgba(0,0,0,0.2); border: 4px solid #1a1410;">
-            <div style="font-family:var(--label); font-size:9px; color:rgba(255,255,255,0.5); letter-spacing:1.5px; text-transform:uppercase; font-weight:700;">Preview · 9:16</div>
-            <div style="text-align:center;">
-              <div style="background:var(--accent); color:#000; display:inline-block; padding:5px 10px; border-radius:4px; font-family:'Fraunces',serif; font-weight:600; font-size:14px; transform:rotate(-2deg); margin-bottom:10px;">${t('theme_' + REEL_STATE.theme).split('·')[0].trim().toUpperCase()}</div>
-              <div style="font-family:'Fraunces',serif; font-size:22px; font-weight:500; line-height:1.1; margin:10px 0;">Take this<br><em style="color:var(--accent);">sectional</em><br>home for $50/mo</div>
-              <div style="font-size:10px; color:rgba(255,255,255,0.7); margin-top:6px;">No credit needed · 210 Discount Furniture</div>
-            </div>
-            <div style="display:flex; justify-content:space-between; align-items:flex-end;">
-              <div>
-                <div style="font-family:var(--serif); font-size:11px;">@210discountfurniture</div>
-                <div style="font-size:9px; color:rgba(255,255,255,0.6); font-family:var(--mono);">Mon-Sat 9-7 · 712-4700</div>
+          <div style="width:260px; aspect-ratio: 9/16; background: ${REEL_STATE.uploadedImage ? "#000" : "linear-gradient(180deg, #2a1f15 0%, #1a1410 100%)"}; position:relative; display:flex; flex-direction:column; justify-content:space-between; padding:16px; border-radius:24px; color:white; box-shadow: 0 10px 30px rgba(0,0,0,0.2); border: 4px solid #1a1410; overflow:hidden;">
+            ${REEL_STATE.videoStage === "done" && REEL_STATE.videoUrl ? `
+              <video src="${REEL_STATE.videoUrl}" controls autoplay loop muted playsinline style="position:absolute; inset:0; width:100%; height:100%; object-fit:cover;"></video>
+            ` : REEL_STATE.uploadedImage ? `
+              <img src="${REEL_STATE.uploadedImage}" style="position:absolute; inset:0; width:100%; height:100%; object-fit:cover; opacity:0.55;">
+              ${REEL_STATE.videoStage === "rendering" || REEL_STATE.videoStage === "starting" ? `
+                <div style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,0.35);">
+                  <div style="font-family:var(--label); font-size:11px; letter-spacing:1px; text-transform:uppercase; background:rgba(0,0,0,0.6); padding:8px 14px; border-radius:20px;">Rendering video&hellip;</div>
+                </div>
+              ` : ''}
+            ` : ''}
+            ${REEL_STATE.videoStage === "done" && REEL_STATE.videoUrl ? `
+              <div style="font-family:var(--label); font-size:9px; color:rgba(255,255,255,0.85); letter-spacing:1.5px; text-transform:uppercase; font-weight:700; position:relative; background:rgba(0,0,0,0.5); display:inline-block; padding:4px 8px; border-radius:4px; pointer-events:none;">Real video · ready to post</div>
+            ` : `
+              <div style="font-family:var(--label); font-size:9px; color:rgba(255,255,255,0.5); letter-spacing:1.5px; text-transform:uppercase; font-weight:700; position:relative;">Preview · 9:16</div>
+              <div style="text-align:center; position:relative;">
+                <div style="background:var(--accent); color:#000; display:inline-block; padding:5px 10px; border-radius:4px; font-family:'Fraunces',serif; font-weight:600; font-size:14px; transform:rotate(-2deg); margin-bottom:10px;">${t('theme_' + REEL_STATE.theme).split('·')[0].trim().toUpperCase()}</div>
+                <div style="font-family:'Fraunces',serif; font-size:22px; font-weight:500; line-height:1.1; margin:10px 0;">Take this<br><em style="color:var(--accent);">sectional</em><br>home for $50/mo</div>
+                <div style="font-size:10px; color:rgba(255,255,255,0.7); margin-top:6px;">No credit needed · 210 Discount Furniture</div>
               </div>
-              <div style="display:flex; flex-direction:column; gap:10px; align-items:center; font-size:14px;">
-                <span style="background:rgba(255,255,255,0.15); padding:6px; border-radius:50%; width:28px; height:28px; display:flex; align-items:center; justify-content:center;">♡</span>
-                <span style="background:rgba(255,255,255,0.15); padding:6px; border-radius:50%; width:28px; height:28px; display:flex; align-items:center; justify-content:center;">↗</span>
+              <div style="display:flex; justify-content:space-between; align-items:flex-end; position:relative;">
+                <div>
+                  <div style="font-family:var(--serif); font-size:11px;">@210discountfurniture</div>
+                  <div style="font-size:9px; color:rgba(255,255,255,0.6); font-family:var(--mono);">Mon-Sat 9-7 · 712-4700</div>
+                </div>
+                <div style="display:flex; flex-direction:column; gap:10px; align-items:center; font-size:14px;">
+                  <span style="background:rgba(255,255,255,0.15); padding:6px; border-radius:50%; width:28px; height:28px; display:flex; align-items:center; justify-content:center;">♡</span>
+                  <span style="background:rgba(255,255,255,0.15); padding:6px; border-radius:50%; width:28px; height:28px; display:flex; align-items:center; justify-content:center;">↗</span>
+                </div>
               </div>
-            </div>
+            `}
           </div>
         </div>
 
@@ -4120,33 +4147,88 @@ function openReelDetail(id) {
 }
 
 // Real call to the worker (item 3) -- POST /api/reels/generate. Sends the
-// promo theme + script; the server generates bilingual captions via
-// Anthropic every time, and also starts a real fal.ai video job if a photo
-// was attached and FAL_KEY is configured server-side. This demo UI does
-// not yet wire real photo upload (the numbered squares above are a
-// placeholder), so this call is caption-only -- still a real API call
-// with a real model response, not a fake alert.
+// promo theme + script + the real uploaded photo (as a data URL); the
+// server generates bilingual captions via Anthropic every time, and
+// starts a real fal.ai image-to-video job (same fal.ai pipeline used for
+// the Goldenberg/Hollywood Ice Cream Co. proposal) when a photo is
+// attached and FAL_KEY is configured server-side (fixed 2026-09-10).
 async function runReelGenerate() {
   var btn = document.getElementById("reels-generate-btn");
   var out = document.getElementById("reels-generate-result");
+  if (!REEL_STATE.uploadedImage) {
+    if (out) out.textContent = "Upload a real furniture photo above first -- video needs a real photo to animate.";
+    return;
+  }
   if (btn) { btn.disabled = true; btn.textContent = "Generating..."; }
   if (out) out.textContent = "";
+  REEL_STATE.videoUrl = null;
+  REEL_STATE.videoStage = "starting";
+  var stillGenerating = true;
   try {
-    var body = { theme: REEL_STATE.theme, script: REEL_STATE.script || sampleScript(REEL_STATE.theme) };
+    var body = {
+      theme: REEL_STATE.theme,
+      script: REEL_STATE.script || sampleScript(REEL_STATE.theme),
+      imageDataUrl: REEL_STATE.uploadedImage,
+    };
     var result = await api("/api/reels/generate", { method: "POST", body: JSON.stringify(body) });
+    if (result.captions) REEL_STATE.captions = result.captions;
     if (out) {
-      if (result.captions) {
-        REEL_STATE.captions = result.captions;
-        out.textContent = "EN: " + result.captions.en + "\n\nES: " + result.captions.es + "\n\n" + (result.message || "");
-      } else {
-        out.textContent = result.message || "Reel generation started.";
-      }
+      out.textContent = "EN: " + (result.captions ? result.captions.en : "") + "\n\nES: " + (result.captions ? result.captions.es : "") + "\n\n" + (result.message || "");
+    }
+    if (result.configured && result.jobId) {
+      REEL_STATE.videoStage = "rendering";
+      stillGenerating = false; // pollReelStatus owns the button from here on
+      renderReels();
+      pollReelStatus(result.jobId, out, btn);
+    } else {
+      REEL_STATE.videoStage = null;
     }
   } catch (e) {
     if (out) out.textContent = "Reel generation failed: " + e.message;
+    REEL_STATE.videoStage = null;
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = t("reels_generate"); }
+    if (stillGenerating && btn) { btn.disabled = false; btn.textContent = t("reels_generate"); }
   }
+}
+
+// Polls the real fal.ai job via GET /api/reels/status/:jobId until it
+// settles (done/error) -- same submit->poll->fetch shape proven for
+// Kostya Studio and the Goldenberg proposal's video pipeline.
+async function pollReelStatus(jobId, out, btn) {
+  if (btn) btn.textContent = "Rendering video...";
+  var attempts = 0;
+  var maxAttempts = 40; // ~2 minutes at 3s intervals
+  while (attempts < maxAttempts) {
+    attempts++;
+    await new Promise(function(r) { setTimeout(r, 3000); });
+    try {
+      var job = await api("/api/reels/status/" + jobId, { method: "GET" });
+      if (job.stage === "done" && job.videoUrl) {
+        REEL_STATE.videoUrl = job.videoUrl;
+        REEL_STATE.videoStage = "done";
+        if (out) out.textContent = (out.textContent || "") + "\n\nVideo ready.";
+        renderReels();
+        break;
+      } else if (job.stage === "error") {
+        REEL_STATE.videoStage = "error";
+        if (out) out.textContent = (out.textContent || "") + "\n\nVideo generation failed: " + (job.error || "unknown error");
+        renderReels();
+        break;
+      }
+      // still rendering -- keep polling
+    } catch (e) {
+      REEL_STATE.videoStage = "error";
+      if (out) out.textContent = (out.textContent || "") + "\n\nLost track of the video job: " + e.message;
+      renderReels();
+      break;
+    }
+  }
+  if (attempts >= maxAttempts && REEL_STATE.videoStage === "rendering") {
+    REEL_STATE.videoStage = "error";
+    if (out) out.textContent = (out.textContent || "") + "\n\nVideo is taking longer than expected -- check back or try again.";
+    renderReels();
+  }
+  if (btn) { btn.disabled = false; btn.textContent = t("reels_generate"); }
 }
 
 // One-click-as-possible publish: no platform is actually connected yet
