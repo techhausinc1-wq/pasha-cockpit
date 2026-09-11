@@ -3980,7 +3980,7 @@ const RECENT_REELS = [
   { id: 'r2', sku: 'MATT-K-PT', theme: 'memorial_day', title: 'King Pillow-Top · Memorial Day 25% off', when: '6 days ago', views: 12300, leads: 38, plat: ['fb','ig','tt'] },
   { id: 'r3', sku: 'BED-0427', theme: 'new_arrival', title: 'Just arrived · Dresser & Mirror Set', when: '11 days ago', views: 2140, leads: 5, plat: ['fb','ig'] }
 ];
-let REEL_STATE = { photos: 4, theme: 'no_credit', script: '' };
+let REEL_STATE = { photos: 4, theme: 'no_credit', script: '', captions: null };
 function renderReels() {
   const html = `
     <h3>${t('reels')}</h3>
@@ -4022,10 +4022,11 @@ function renderReels() {
           <button class="btn primary full" id="reels-generate-btn" onclick="runReelGenerate()">${t('reels_generate')}</button>
           <div id="reels-generate-result" style="font-size:12px; color:var(--dim); margin-top:8px; white-space:pre-wrap;"></div>
           <div style="display:flex; gap:6px; margin-top:10px;">
-            <button class="btn ghost sm" style="flex:1;">${t('reels_publish_fb')}</button>
-            <button class="btn ghost sm" style="flex:1;">${t('reels_publish_ig')}</button>
-            <button class="btn ghost sm" style="flex:1;">${t('reels_publish_tt')}</button>
+            <button class="btn ghost sm" style="flex:1;" onclick="publishReelTo('facebook')">${t('reels_publish_fb')}</button>
+            <button class="btn ghost sm" style="flex:1;" onclick="publishReelTo('instagram')">${t('reels_publish_ig')}</button>
+            <button class="btn ghost sm" style="flex:1;" onclick="publishReelTo('tiktok')">${t('reels_publish_tt')}</button>
           </div>
+          <div id="reels-publish-result" style="font-size:12px; color:var(--dim); margin-top:8px;"></div>
         </div>
       </div>
 
@@ -4135,6 +4136,7 @@ async function runReelGenerate() {
     var result = await api("/api/reels/generate", { method: "POST", body: JSON.stringify(body) });
     if (out) {
       if (result.captions) {
+        REEL_STATE.captions = result.captions;
         out.textContent = "EN: " + result.captions.en + "\n\nES: " + result.captions.es + "\n\n" + (result.message || "");
       } else {
         out.textContent = result.message || "Reel generation started.";
@@ -4147,6 +4149,35 @@ async function runReelGenerate() {
   }
 }
 
+// One-click-as-possible publish: no platform is actually connected yet
+// (Facebook/Instagram/TikTok Business auth not done -- see the Connect
+// card), so this copies the caption to the clipboard and opens the right
+// platform in a new tab, same pattern already proven for Igor HQ. Instagram
+// specifically has no public web "compose post" URL (confirmed dead end),
+// so the best real option is to land on instagram.com already logged in,
+// ready to tap the + button -- not a full one-click post, but copy+paste
+// instead of retyping the caption by hand.
+const PUBLISH_URLS = {
+  facebook: 'https://www.facebook.com/',
+  instagram: 'https://www.instagram.com/',
+  tiktok: 'https://www.tiktok.com/upload',
+};
+function publishReelTo(platform) {
+  var out = document.getElementById('reels-publish-result');
+  var caps = REEL_STATE.captions;
+  if (!caps) {
+    if (out) out.textContent = 'Generate a reel first -- there\'s no caption to copy yet.';
+    return;
+  }
+  var caption = caps.en + (caps.es ? '\n\n' + caps.es : '');
+  var opened = window.open(PUBLISH_URLS[platform], '_blank');
+  try {
+    navigator.clipboard.writeText(caption);
+    if (out) out.textContent = 'Caption copied. ' + (opened ? 'Opened ' + platform + ' -- paste the caption and attach your video/photo.' : (platform + ' didn\'t open (popup blocked) -- go there manually and paste.'));
+  } catch (e) {
+    if (out) out.textContent = opened ? platform + ' opened, but the caption couldn\'t auto-copy -- copy it from the box above.' : 'Could not open ' + platform + ' or copy the caption -- copy it from the box above and go there manually.';
+  }
+}
 
 function sampleScript(theme) {
   const samples = {
