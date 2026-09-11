@@ -86,6 +86,7 @@ import {
 import { lenderConfigured, submitToLender, type LenderName } from "./lib/financing.ts";
 import { adPlatformsConfigured, getGoogleAdInsights, getMetaAdInsights, getTikTokAdInsights } from "./lib/ad-platforms.ts";
 import { publishToTikTok, tiktokConfigured } from "./lib/tiktok.ts";
+import { buildDailyDigestData, resendConfigured, sendDailyDigestEmail } from "./lib/digest.ts";
 
 const PORT = parseInt(Deno.env.get("PORT") || "8001");
 // web/data live INSIDE worker/ (worker/docs/, worker/data/), not at the
@@ -181,6 +182,25 @@ console.log("Sample PINs: " + SHELL_USERS.map((u) => u.name + "=" + u.pin).join(
 console.log("FAL_KEY (reels): " + (falConfigured() ? "configured" : "not configured -- see docs/AD-ROI-SETUP.md pattern"));
 console.log("Meta OAuth: " + (metaConfigured() ? "configured" : "not configured -- see docs/META-BUSINESS-SETUP.md"));
 console.log("TikTok: " + (tiktokConfigured() ? "configured" : "not configured -- see docs/TIKTOK-SETUP.md"));
+console.log("Daily digest email: " + (resendConfigured() ? "configured" : "not configured -- see docs/RESEND-DIGEST-SETUP.md"));
+
+// Real end-of-day report, sent every night to every owner-level user with
+// a real email on file (Paul, Ivan) -- item 7 of Ivan's "do everything"
+// ask, 2026-09-10. Only fires for real once RESEND_API_KEY/DIGEST_EMAIL_FROM
+// are set; sendDailyDigestEmail() no-ops gracefully until then.
+if (typeof Deno.cron === "function") {
+  Deno.cron("pasha-daily-digest", "0 21 * * *", async () => {
+    if (!resendConfigured()) {
+      console.log("Daily digest cron fired but RESEND_API_KEY/DIGEST_EMAIL_FROM not set -- skipping send.");
+      return;
+    }
+    for (const u of SHELL_USERS) {
+      if (!u.is_master || !u.email) continue;
+      const result = await sendDailyDigestEmail(u.email);
+      console.log("Daily digest to " + u.email + ": " + (result.ok ? "sent" : "failed -- " + result.error));
+    }
+  });
+}
 
 Deno.serve({ port: PORT }, async (req: Request) => {
   if (req.method === "OPTIONS") {
@@ -742,6 +762,28 @@ Deno.serve({ port: PORT }, async (req: Request) => {
       connected: Boolean(conn),
       pages: conn ? conn.pages.map((p) => ({ id: p.id, name: p.name, igUsername: p.igUsername })) : [],
     });
+  }
+
+  // ── daily digest report (item 7, "do everything" 2026-09-10) ────────
+  if (path === "/api/digest/preview" && req.method === "GET") {
+    if (!can("workers.read.team-leaderboard") && !can("workers.read.all-performance")) {
+      return json({ error: "forbidden", missing_atom: "workers.read.team-leaderboard" }, 403);
+    }
+    const data = await buildDailyDigestData();
+    return json({ data, email_configured: resendConfigured() });
+  }
+  if (path === "/api/digest/send" && req.method === "POST") {
+    if (!user.is_master) return json({ error: "forbidden", missing_atom: "owner-only" }, 403);
+    let body: { toEmail?: string };
+    try {
+      body = await req.json();
+    } catch {
+      body = {};
+    }
+    const to = body.toEmail || user.email;
+    if (!to) return json({ error: "no_email_on_file_for_this_user" }, 400);
+    const result = await sendDailyDigestEmail(to);
+    return json(result, result.ok ? 200 : 502);
   }
 
   // ── team / users (PIN management) ───────────────────────────────────

@@ -4041,6 +4041,15 @@ function renderReels() {
           </div>
           <div id="reels-publish-result" style="font-size:12px; color:var(--dim); margin-top:8px;"></div>
         </div>
+
+        <div class="card">
+          <h2 style="margin-top:0;">Make an ad graphic</h2>
+          <div style="font-size:12px; color:var(--dim); margin-bottom:10px;">A real static ad image built from your uploaded photo -- ready to run as a Facebook/Instagram ad or post as-is. No account connection needed for this part.</div>
+          <button class="btn primary full" onclick="generateAdGraphic()">Generate ad graphic</button>
+          <canvas id="ad-graphic-canvas" width="1080" height="1080" style="display:none; width:100%; max-width:260px; margin:12px auto 0; border-radius:10px; box-shadow:0 4px 16px rgba(0,0,0,0.15);"></canvas>
+          <div id="ad-graphic-result" style="font-size:12px; color:var(--dim); margin-top:8px;"></div>
+          <button class="btn ghost full" id="ad-graphic-download" style="display:none; margin-top:8px;" onclick="downloadAdGraphic()">Download ad graphic</button>
+        </div>
       </div>
 
       <div>
@@ -4259,6 +4268,117 @@ function publishReelTo(platform) {
   } catch (e) {
     if (out) out.textContent = opened ? platform + ' opened, but the caption couldn\'t auto-copy -- copy it from the box above.' : 'Could not open ' + platform + ' or copy the caption -- copy it from the box above and go there manually.';
   }
+}
+
+// Real static ad-graphic generator -- client-side Canvas, same cover-fit +
+// gradient-overlay + text-wrap technique already proven live in Igor HQ's
+// drawGraphic(). Answers "make ads from pictures of furniture" directly:
+// produces a real downloadable branded image (not a mockup), usable as a
+// Facebook/Instagram feed post or as creative in Meta/TikTok Ads Manager
+// once those accounts are connected -- doesn't need any account connected
+// to generate the image itself.
+function wrapCanvasText(ctx, text, x, y, maxW, lineH) {
+  if (!text) return y;
+  var words = text.split(' ');
+  var line = '';
+  for (var i = 0; i < words.length; i++) {
+    var test = line ? line + ' ' + words[i] : words[i];
+    if (ctx.measureText(test).width > maxW && line) {
+      ctx.fillText(line, x, y);
+      y += lineH;
+      line = words[i];
+    } else {
+      line = test;
+    }
+  }
+  if (line) { ctx.fillText(line, x, y); y += lineH; }
+  return y;
+}
+function loadImageEl(src) {
+  return new Promise(function(resolve, reject) {
+    var img = new Image();
+    img.onload = function() { resolve(img); };
+    img.onerror = reject;
+    img.src = src;
+  });
+}
+async function generateAdGraphic() {
+  var out = document.getElementById('ad-graphic-result');
+  var cv = document.getElementById('ad-graphic-canvas');
+  var dlBtn = document.getElementById('ad-graphic-download');
+  if (!REEL_STATE.uploadedImage) {
+    if (out) out.textContent = 'Upload a real furniture photo above first.';
+    return;
+  }
+  if (out) out.textContent = 'Building graphic...';
+  var W = cv.width, H = cv.height;
+  var ctx = cv.getContext('2d');
+  try {
+    var img = await loadImageEl(REEL_STATE.uploadedImage);
+    var scale = Math.max(W / img.width, H / img.height);
+    var sw = img.width * scale, sh = img.height * scale;
+    var sx = (W - sw) / 2, sy = (H - sh) / 2;
+    ctx.drawImage(img, sx, sy, sw, sh);
+
+    var grad = ctx.createLinearGradient(0, 0, 0, H);
+    grad.addColorStop(0, 'rgba(20,10,5,0.15)');
+    grad.addColorStop(0.55, 'rgba(20,10,5,0.55)');
+    grad.addColorStop(1, 'rgba(20,10,5,0.92)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, H);
+
+    var pad = Math.round(W * 0.07);
+
+    // Brand bar, top
+    ctx.fillStyle = '#fff';
+    ctx.font = '800 ' + Math.round(W * 0.045) + 'px Georgia, serif';
+    ctx.textBaseline = 'top';
+    ctx.fillText('210 DISCOUNT FURNITURE', pad, pad * 0.7);
+
+    // Promo tag pill
+    var themeLabel = (t('theme_' + REEL_STATE.theme) || REEL_STATE.theme).split('·')[0].trim().toUpperCase();
+    ctx.font = '800 ' + Math.round(W * 0.032) + 'px Arial, sans-serif';
+    var tagW = ctx.measureText(themeLabel).width + Math.round(W * 0.06);
+    var tagY = H * 0.58;
+    ctx.fillStyle = '#f0a020';
+    ctx.beginPath();
+    if (ctx.roundRect) { ctx.roundRect(pad, tagY, tagW, Math.round(W * 0.075), Math.round(W * 0.02)); } else { ctx.rect(pad, tagY, tagW, Math.round(W * 0.075)); }
+    ctx.fill();
+    ctx.fillStyle = '#000';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(themeLabel, pad + Math.round(W * 0.03), tagY + Math.round(W * 0.0375));
+
+    // Headline -- real caption if generated, else the sample script
+    var headline = (REEL_STATE.captions && REEL_STATE.captions.en) || REEL_STATE.script || sampleScript(REEL_STATE.theme);
+    ctx.fillStyle = '#fff';
+    ctx.font = '600 ' + Math.round(W * 0.052) + 'px Georgia, serif';
+    ctx.textBaseline = 'alphabetic';
+    var headlineY = tagY + Math.round(W * 0.14);
+    headlineY = wrapCanvasText(ctx, headline, pad, headlineY, W - pad * 2, Math.round(W * 0.062));
+
+    // Bottom bar -- phone, hours, handle
+    ctx.font = '700 ' + Math.round(W * 0.03) + 'px Arial, sans-serif';
+    ctx.fillStyle = '#f0a020';
+    ctx.fillText('No credit needed · 210-712-4700', pad, H - pad * 1.1);
+    ctx.font = '400 ' + Math.round(W * 0.024) + 'px Arial, sans-serif';
+    ctx.fillStyle = 'rgba(255,255,255,0.75)';
+    ctx.fillText('Mon-Sat 9am-7pm · @210discountfurniture', pad, H - pad * 0.65);
+
+    cv.style.display = 'block';
+    dlBtn.style.display = 'block';
+    if (out) out.textContent = 'Ad graphic ready. Download it, or copy the caption above and post it directly.';
+  } catch (e) {
+    if (out) out.textContent = 'Could not build the graphic: ' + e.message;
+  }
+}
+function downloadAdGraphic() {
+  var cv = document.getElementById('ad-graphic-canvas');
+  var a = document.createElement('a');
+  a.href = cv.toDataURL('image/png');
+  a.download = '210-discount-furniture-ad-' + REEL_STATE.theme + '.png';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
 }
 
 function sampleScript(theme) {
