@@ -14,9 +14,11 @@
 // a clear {configured:false} result instead of failing, same fallback
 // pattern as every other credential-gated integration in this app.
 
-const GMAIL_CLIENT_ID = Deno.env.get("GMAIL_CLIENT_ID") ?? "";
-const GMAIL_CLIENT_SECRET = Deno.env.get("GMAIL_CLIENT_SECRET") ?? "";
-const GMAIL_REFRESH_TOKEN = Deno.env.get("GMAIL_REFRESH_TOKEN") ?? "";
+import { getEnv } from "./env.ts";
+
+const GMAIL_CLIENT_ID = (): string => getEnv("GMAIL_CLIENT_ID") ?? "";
+const GMAIL_CLIENT_SECRET = (): string => getEnv("GMAIL_CLIENT_SECRET") ?? "";
+const GMAIL_REFRESH_TOKEN = (): string => getEnv("GMAIL_REFRESH_TOKEN") ?? "";
 
 // Best-known public sending domains for 210's actual financing lenders.
 // Verify against Pasha's real inbox before trusting this list -- a lender
@@ -30,7 +32,7 @@ const LENDER_DOMAINS = [
 ];
 
 export function gmailConfigured(): boolean {
-  return Boolean(GMAIL_CLIENT_ID && GMAIL_CLIENT_SECRET && GMAIL_REFRESH_TOKEN);
+  return Boolean(GMAIL_CLIENT_ID() && GMAIL_CLIENT_SECRET() && GMAIL_REFRESH_TOKEN());
 }
 
 async function getFreshAccessToken(): Promise<string> {
@@ -38,9 +40,9 @@ async function getFreshAccessToken(): Promise<string> {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
-      client_id: GMAIL_CLIENT_ID,
-      client_secret: GMAIL_CLIENT_SECRET,
-      refresh_token: GMAIL_REFRESH_TOKEN,
+      client_id: GMAIL_CLIENT_ID(),
+      client_secret: GMAIL_CLIENT_SECRET(),
+      refresh_token: GMAIL_REFRESH_TOKEN(),
       grant_type: "refresh_token",
     }),
   });

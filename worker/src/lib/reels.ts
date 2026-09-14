@@ -12,10 +12,11 @@
 // feliks-valet-cockpit/worker/main.ts.
 
 import { kvGet, kvSet, nanoid } from "./kv.ts";
+import { getEnv } from "./env.ts";
 
 const ANTHROPIC_API = "https://api.anthropic.com/v1/messages";
 const MODEL = "claude-sonnet-4-5";
-const FAL_KEY = Deno.env.get("FAL_KEY") ?? "";
+const FAL_KEY = (): string => getEnv("FAL_KEY") ?? "";
 const FAL_VIDEO_APP = "fal-ai/kling-video/v2.5-turbo/pro/image-to-video";
 const REEL_JOB_TTL_MS = 60 * 60 * 1000;
 const RES = "reel_jobs";
@@ -55,7 +56,7 @@ export async function generateCaptions(
   userScript: string,
   productName?: string,
 ): Promise<CaptionResult> {
-  const key = Deno.env.get("ANTHROPIC_KEY");
+  const key = getEnv("ANTHROPIC_KEY");
   if (!key) throw new Error("ANTHROPIC_KEY not set");
   const tag = PROMO_TAGS.find((t) => t.id === theme);
   const promoLabel = tag ? tag.label_en : theme;
@@ -93,20 +94,20 @@ export async function generateCaptions(
 async function falSubmit(appId: string, input: Record<string, unknown>): Promise<{ request_id: string; status_url: string; response_url: string }> {
   const res = await fetch("https://queue.fal.run/" + appId, {
     method: "POST",
-    headers: { "content-type": "application/json", authorization: "Key " + FAL_KEY },
+    headers: { "content-type": "application/json", authorization: "Key " + FAL_KEY() },
     body: JSON.stringify(input),
   });
   if (!res.ok) throw new Error("fal submit failed (" + res.status + ")");
   return res.json();
 }
 async function falStatus(statusUrl: string): Promise<{ status: string }> {
-  const res = await fetch(statusUrl, { headers: { authorization: "Key " + FAL_KEY } });
+  const res = await fetch(statusUrl, { headers: { authorization: "Key " + FAL_KEY() } });
   if (!res.ok) throw new Error("fal status check failed (" + res.status + ")");
   return res.json();
 }
 // deno-lint-ignore no-explicit-any
 async function falResult(responseUrl: string): Promise<any> {
-  const res = await fetch(responseUrl, { headers: { authorization: "Key " + FAL_KEY } });
+  const res = await fetch(responseUrl, { headers: { authorization: "Key " + FAL_KEY() } });
   if (!res.ok) throw new Error("fal result fetch failed (" + res.status + ")");
   return res.json();
 }
@@ -134,7 +135,7 @@ export interface ReelStartResult {
 
 // Generates bilingual captions unconditionally (Anthropic call, already
 // live via drafter.ts pattern), then starts the fal.ai video job only if
-// FAL_KEY is configured -- graceful partial success instead of an
+// FAL_KEY() is configured -- graceful partial success instead of an
 // all-or-nothing failure, same fallback pattern as Twilio/Square/
 // QuickBooks in feliks-valet-cockpit/worker/main.ts.
 export async function startReel(
@@ -144,11 +145,11 @@ export async function startReel(
   productName?: string,
 ): Promise<ReelStartResult> {
   const captions = await generateCaptions(theme, userScript, productName);
-  if (!FAL_KEY) {
+  if (!FAL_KEY()) {
     return {
       configured: false,
       captions,
-      message: "Captions generated. Video generation is not connected yet -- this deployment is missing its FAL_KEY environment variable (see docs/AD-ROI-SETUP.md sibling docs for the pattern; FAL_KEY setup itself is a one-line fal.ai dashboard key). Captions can still be copied and posted manually.",
+      message: "Captions generated. Video generation is not connected yet -- this deployment is missing its FAL_KEY() environment variable (see docs/AD-ROI-SETUP.md sibling docs for the pattern; FAL_KEY() setup itself is a one-line fal.ai dashboard key). Captions can still be copied and posted manually.",
     };
   }
   const submitted = await falSubmit(FAL_VIDEO_APP, {
@@ -196,5 +197,5 @@ export async function advanceReel(jobId: string): Promise<ReelJob | null> {
 }
 
 export function falConfigured(): boolean {
-  return Boolean(FAL_KEY);
+  return Boolean(FAL_KEY());
 }

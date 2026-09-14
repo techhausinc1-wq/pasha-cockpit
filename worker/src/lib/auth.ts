@@ -14,7 +14,7 @@
 // scheme had ANY caller who knew the naming convention able to mint a
 // valid access code for any user id).
 
-import { getKv, kvGet, kvSet, nanoid } from "./kv.ts";
+import { kvDelete, kvGet, kvList, kvSet, nanoid } from "./kv.ts";
 import { findUser, SHELL_USERS, type User } from "./rbac.ts";
 
 const USERS_RES = "users";
@@ -51,11 +51,7 @@ export async function getUserById(id: string): Promise<User | null> {
 }
 
 export async function listUsers(): Promise<User[]> {
-  const kv = await getKv();
-  const out: User[] = [];
-  const prefix = ["pasha", USERS_RES];
-  for await (const entry of kv.list<User>({ prefix })) out.push(entry.value);
-  return out;
+  return kvList<User>(USERS_RES);
 }
 
 export async function setUserPin(id: string, pin: string): Promise<User | null> {
@@ -89,9 +85,7 @@ export async function userFromToken(token: string): Promise<User | null> {
 }
 
 export async function deleteSession(token: string): Promise<void> {
-  const kv = await getKv();
-  const key = ["pasha", SESSIONS_RES, token];
-  await kv.delete(key);
+  await kvDelete(SESSIONS_RES, token);
 }
 
 export function bearerToken(req: Request): string {

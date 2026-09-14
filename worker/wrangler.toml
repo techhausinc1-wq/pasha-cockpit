@@ -1,0 +1,17 @@
+name = "pasha-cockpit"
+main = "src/main.ts"
+compatibility_date = "2026-09-01"
+account_id = "d72bccc4d142f635dfa744038f4a5bc7"
+
+[[kv_namespaces]]
+binding = "KV"
+id = "dbd4bafcb5d54806b030995a537b5ee9"
+
+[assets]
+directory = "docs"
+binding = "ASSETS"
+
+# Real end-of-day digest, same schedule as the old Deno.cron
+# ("0 21 * * *", 9pm UTC) -- see main.ts's scheduled() handler.
+[triggers]
+crons = ["0 21 * * *"]

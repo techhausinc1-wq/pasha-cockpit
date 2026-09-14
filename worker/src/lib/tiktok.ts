@@ -5,6 +5,7 @@
 // docs/TIKTOK-SETUP.md for the developer-portal steps.
 
 import { getTikTokConn, getValidTikTokAccessToken } from "./tiktok-oauth.ts";
+import { getEnv } from "./env.ts";
 
 export interface TikTokPublishResult {
   configured: boolean;
@@ -26,7 +27,7 @@ export async function publishToTikTok(videoUrl: string, caption: string): Promis
   // Prefer a real OAuth connection (lib/tiktok-oauth.ts, auto-refreshed)
   // over the static env var -- the env var remains a valid fallback for
   // manual/testing use per docs/TIKTOK-SETUP.md Phase 1 step 7.
-  const accessToken = (await getValidTikTokAccessToken()) ?? Deno.env.get("TIKTOK_ACCESS_TOKEN") ?? "";
+  const accessToken = (await getValidTikTokAccessToken()) ?? getEnv("TIKTOK_ACCESS_TOKEN") ?? "";
   if (!accessToken) {
     return { configured: false, ok: false, message: "TikTok not configured (see docs/TIKTOK-SETUP.md) -- connect via /oauth/tiktok/start or set TIKTOK_ACCESS_TOKEN." };
   }
@@ -62,6 +63,6 @@ export async function publishToTikTok(videoUrl: string, caption: string): Promis
 }
 
 export async function tiktokConfigured(): Promise<boolean> {
-  if (Deno.env.get("TIKTOK_ACCESS_TOKEN")) return true;
+  if (getEnv("TIKTOK_ACCESS_TOKEN")) return true;
   return Boolean(await getTikTokConn());
 }

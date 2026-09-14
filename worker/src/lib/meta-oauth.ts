@@ -25,10 +25,11 @@
 // that review is granted. Posting (reels/promos) works today without
 // review; message ingestion does not yet exist.
 
-import { getKv, kvGetDoc, kvSetDoc, nanoid } from "./kv.ts";
+import { kvDelete, kvGet, kvGetDoc, kvSet, kvSetDoc, nanoid } from "./kv.ts";
+import { getEnv } from "./env.ts";
 
-const META_APP_ID = Deno.env.get("META_APP_ID") ?? "";
-const META_APP_SECRET = Deno.env.get("META_APP_SECRET") ?? "";
+const META_APP_ID = (): string => getEnv("META_APP_ID") ?? "";
+const META_APP_SECRET = (): string => getEnv("META_APP_SECRET") ?? "";
 const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
 const CONN_RES = "meta_conn";
 const STATE_RES = "oauth_state";
@@ -65,26 +66,22 @@ export async function saveMetaConn(conn: MetaConnection): Promise<void> {
   await kvSetDoc(CONN_RES, conn);
 }
 export function metaConfigured(): boolean {
-  return Boolean(META_APP_ID && META_APP_SECRET);
+  return Boolean(META_APP_ID() && META_APP_SECRET());
 }
 
 export async function saveOAuthState(state: string): Promise<void> {
-  const kv = await getKv();
-  const key = ["pasha", STATE_RES, state];
-  await kv.set(key, true, { expireIn: OAUTH_STATE_TTL_MS });
+  await kvSet(STATE_RES, state, true, OAUTH_STATE_TTL_MS);
 }
 export async function consumeOAuthState(state: string): Promise<boolean> {
-  const kv = await getKv();
-  const key = ["pasha", STATE_RES, state];
-  const entry = await kv.get(key);
-  if (!entry.value) return false;
-  await kv.delete(key);
+  const entry = await kvGet<boolean>(STATE_RES, state);
+  if (!entry) return false;
+  await kvDelete(STATE_RES, state);
   return true;
 }
 
 export function buildAuthUrl(redirectUri: string, state: string): string {
   const auth = new URL("https://www.facebook.com/v20.0/dialog/oauth");
-  auth.searchParams.set("client_id", META_APP_ID);
+  auth.searchParams.set("client_id", META_APP_ID());
   auth.searchParams.set("redirect_uri", redirectUri);
   auth.searchParams.set("state", state);
   auth.searchParams.set("scope", META_SCOPES.join(","));
@@ -97,8 +94,8 @@ export function buildAuthUrl(redirectUri: string, state: string): string {
 // does.
 async function exchangeCodeForToken(code: string, redirectUri: string): Promise<string> {
   const tokenUrl = new URL("https://graph.facebook.com/v20.0/oauth/access_token");
-  tokenUrl.searchParams.set("client_id", META_APP_ID);
-  tokenUrl.searchParams.set("client_secret", META_APP_SECRET);
+  tokenUrl.searchParams.set("client_id", META_APP_ID());
+  tokenUrl.searchParams.set("client_secret", META_APP_SECRET());
   tokenUrl.searchParams.set("redirect_uri", redirectUri);
   tokenUrl.searchParams.set("code", code);
   const res = await fetch(tokenUrl);
@@ -106,8 +103,8 @@ async function exchangeCodeForToken(code: string, redirectUri: string): Promise<
   if (!res.ok || !data.access_token) throw new Error("Meta token exchange failed: " + JSON.stringify(data));
   const longUrl = new URL("https://graph.facebook.com/v20.0/oauth/access_token");
   longUrl.searchParams.set("grant_type", "fb_exchange_token");
-  longUrl.searchParams.set("client_id", META_APP_ID);
-  longUrl.searchParams.set("client_secret", META_APP_SECRET);
+  longUrl.searchParams.set("client_id", META_APP_ID());
+  longUrl.searchParams.set("client_secret", META_APP_SECRET());
   longUrl.searchParams.set("fb_exchange_token", data.access_token);
   const longRes = await fetch(longUrl);
   const longData = await longRes.json();

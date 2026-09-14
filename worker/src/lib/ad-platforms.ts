@@ -3,6 +3,8 @@
 // configured" fallback as the rest of this worker. See
 // docs/AD-ROI-SETUP.md for what to request from each platform.
 
+import { getEnv } from "./env.ts";
+
 export interface AdInsight {
   configured: boolean;
   platform: "meta" | "google" | "tiktok";
@@ -19,8 +21,8 @@ export interface AdInsight {
 // -- can reuse the same Meta App as lib/meta-oauth.ts) + META_AD_ACCOUNT_ID
 // (format act_<id>, from Business Manager -> Ad Account settings).
 export async function getMetaAdInsights(dateFrom: string, dateTo: string): Promise<AdInsight> {
-  const token = Deno.env.get("META_ADS_ACCESS_TOKEN") ?? "";
-  const accountId = Deno.env.get("META_AD_ACCOUNT_ID") ?? "";
+  const token = getEnv("META_ADS_ACCESS_TOKEN") ?? "";
+  const accountId = getEnv("META_AD_ACCOUNT_ID") ?? "";
   if (!token || !accountId) {
     return { configured: false, platform: "meta", ok: false, message: "Meta Ads not configured (see docs/AD-ROI-SETUP.md) -- set META_ADS_ACCESS_TOKEN, META_AD_ACCOUNT_ID." };
   }
@@ -48,9 +50,9 @@ export async function getMetaAdInsights(dateFrom: string, dateTo: string): Promi
 // refresh is identical to any other Google OAuth integration and out of
 // scope to re-derive per-call).
 export async function getGoogleAdInsights(dateFrom: string, dateTo: string): Promise<AdInsight> {
-  const developerToken = Deno.env.get("GOOGLE_ADS_DEVELOPER_TOKEN") ?? "";
-  const customerId = Deno.env.get("GOOGLE_ADS_CUSTOMER_ID") ?? "";
-  const accessToken = Deno.env.get("GOOGLE_ADS_ACCESS_TOKEN") ?? "";
+  const developerToken = getEnv("GOOGLE_ADS_DEVELOPER_TOKEN") ?? "";
+  const customerId = getEnv("GOOGLE_ADS_CUSTOMER_ID") ?? "";
+  const accessToken = getEnv("GOOGLE_ADS_ACCESS_TOKEN") ?? "";
   if (!developerToken || !customerId || !accessToken) {
     return { configured: false, platform: "google", ok: false, message: "Google Ads not configured (see docs/AD-ROI-SETUP.md) -- set GOOGLE_ADS_DEVELOPER_TOKEN, GOOGLE_ADS_CUSTOMER_ID, GOOGLE_ADS_ACCESS_TOKEN." };
   }
@@ -85,8 +87,8 @@ export async function getGoogleAdInsights(dateFrom: string, dateTo: string): Pro
 // Requires TIKTOK_ADS_ACCESS_TOKEN + TIKTOK_ADVERTISER_ID (from TikTok for
 // Business -> Assets -> Advertiser ID).
 export async function getTikTokAdInsights(dateFrom: string, dateTo: string): Promise<AdInsight> {
-  const accessToken = Deno.env.get("TIKTOK_ADS_ACCESS_TOKEN") ?? "";
-  const advertiserId = Deno.env.get("TIKTOK_ADVERTISER_ID") ?? "";
+  const accessToken = getEnv("TIKTOK_ADS_ACCESS_TOKEN") ?? "";
+  const advertiserId = getEnv("TIKTOK_ADVERTISER_ID") ?? "";
   if (!accessToken || !advertiserId) {
     return { configured: false, platform: "tiktok", ok: false, message: "TikTok Ads not configured (see docs/AD-ROI-SETUP.md) -- set TIKTOK_ADS_ACCESS_TOKEN, TIKTOK_ADVERTISER_ID." };
   }
@@ -118,8 +120,8 @@ export async function getTikTokAdInsights(dateFrom: string, dateTo: string): Pro
 
 export function adPlatformsConfigured(): Record<"meta" | "google" | "tiktok", boolean> {
   return {
-    meta: Boolean(Deno.env.get("META_ADS_ACCESS_TOKEN") && Deno.env.get("META_AD_ACCOUNT_ID")),
-    google: Boolean(Deno.env.get("GOOGLE_ADS_DEVELOPER_TOKEN") && Deno.env.get("GOOGLE_ADS_CUSTOMER_ID")),
-    tiktok: Boolean(Deno.env.get("TIKTOK_ADS_ACCESS_TOKEN") && Deno.env.get("TIKTOK_ADVERTISER_ID")),
+    meta: Boolean(getEnv("META_ADS_ACCESS_TOKEN") && getEnv("META_AD_ACCOUNT_ID")),
+    google: Boolean(getEnv("GOOGLE_ADS_DEVELOPER_TOKEN") && getEnv("GOOGLE_ADS_CUSTOMER_ID")),
+    tiktok: Boolean(getEnv("TIKTOK_ADS_ACCESS_TOKEN") && getEnv("TIKTOK_ADVERTISER_ID")),
   };
 }

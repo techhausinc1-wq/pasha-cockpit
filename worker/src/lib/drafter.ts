@@ -10,6 +10,8 @@
 //
 // Returns the draft for human review; never auto-sends.
 
+import { getEnv } from "./env.ts";
+
 const ANTHROPIC_API = "https://api.anthropic.com/v1/messages";
 const MODEL = "claude-sonnet-4-5";
 
@@ -219,7 +221,7 @@ function buildUserPrompt(ctx: InboundContext): string {
 // Main entry point
 // =============================================================
 export async function draftReply(ctx: InboundContext): Promise<DraftResult> {
-  const key = Deno.env.get("ANTHROPIC_KEY");
+  const key = getEnv("ANTHROPIC_KEY");
   if (!key) throw new Error("ANTHROPIC_KEY not set");
 
   const sys = buildSystemPrompt(ctx);

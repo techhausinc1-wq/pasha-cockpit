@@ -13,6 +13,8 @@
 // POST is the actual event delivery, signed with the app secret:
 // https://developers.facebook.com/docs/graph-api/webhooks/getting-started#validating-payloads
 
+import { getEnv } from "./env.ts";
+
 const GRAPH_VERSION = "v20.0";
 
 export interface WhatsAppInboundMessage {
@@ -29,7 +31,7 @@ export function handleWebhookVerification(url: URL): Response {
   const token = url.searchParams.get("hub.verify_token");
   const challenge = url.searchParams.get("hub.challenge");
 
-  const expected = Deno.env.get("WHATSAPP_VERIFY_TOKEN");
+  const expected = getEnv("WHATSAPP_VERIFY_TOKEN");
   if (mode === "subscribe" && expected && token === expected && challenge) {
     return new Response(challenge, { status: 200 });
   }
@@ -45,7 +47,7 @@ export async function verifyWebhookSignature(
   rawBody: string,
   signatureHeader: string | null,
 ): Promise<boolean> {
-  const secret = Deno.env.get("WHATSAPP_APP_SECRET");
+  const secret = getEnv("WHATSAPP_APP_SECRET");
   if (!secret) return false;
   if (!signatureHeader || !signatureHeader.startsWith("sha256=")) return false;
   const expectedHex = signatureHeader.slice("sha256=".length);
@@ -126,8 +128,8 @@ export async function sendWhatsAppText(
   to: string,
   body: string,
 ): Promise<SendResult> {
-  const token = Deno.env.get("WHATSAPP_TOKEN");
-  const phoneNumberId = Deno.env.get("WHATSAPP_PHONE_NUMBER_ID");
+  const token = getEnv("WHATSAPP_TOKEN");
+  const phoneNumberId = getEnv("WHATSAPP_PHONE_NUMBER_ID");
   if (!token || !phoneNumberId) {
     return {
       ok: false,
@@ -173,8 +175,8 @@ export async function sendWhatsAppTemplate(
   languageCode: string,
   bodyParams: string[] = [],
 ): Promise<SendResult> {
-  const token = Deno.env.get("WHATSAPP_TOKEN");
-  const phoneNumberId = Deno.env.get("WHATSAPP_PHONE_NUMBER_ID");
+  const token = getEnv("WHATSAPP_TOKEN");
+  const phoneNumberId = getEnv("WHATSAPP_PHONE_NUMBER_ID");
   if (!token || !phoneNumberId) {
     return {
       ok: false,
@@ -253,8 +255,8 @@ export async function broadcastWhatsAppTemplate(
 
 // Mark a message read (blue ticks) — good practice, not required.
 export async function markWhatsAppRead(messageId: string): Promise<void> {
-  const token = Deno.env.get("WHATSAPP_TOKEN");
-  const phoneNumberId = Deno.env.get("WHATSAPP_PHONE_NUMBER_ID");
+  const token = getEnv("WHATSAPP_TOKEN");
+  const phoneNumberId = getEnv("WHATSAPP_PHONE_NUMBER_ID");
   if (!token || !phoneNumberId) return;
   await fetch(
     `https://graph.facebook.com/${GRAPH_VERSION}/${phoneNumberId}/messages`,

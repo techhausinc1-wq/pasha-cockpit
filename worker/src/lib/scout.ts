@@ -16,6 +16,7 @@
 // scout.write atom) applies here too.
 
 import { kvGet, kvList, kvSet } from "./kv.ts";
+import { getEnv } from "./env.ts";
 
 const RES = "prospects";
 const ANTHROPIC_API = "https://api.anthropic.com/v1/messages";
@@ -142,7 +143,7 @@ export async function seedScoutIfEmpty(): Promise<void> {
 // venue with a verifiable published contact, empty contact fields rather
 // than a guess.
 export async function runScoutSearch(category: ScoutCategory): Promise<ScoutProspect[]> {
-  const key = Deno.env.get("ANTHROPIC_KEY");
+  const key = getEnv("ANTHROPIC_KEY");
   if (!key) throw new Error("ANTHROPIC_KEY not set");
   const existing = await listProspects();
   const knownTitles = new Set(existing.map((p) => p.title.toLowerCase()));

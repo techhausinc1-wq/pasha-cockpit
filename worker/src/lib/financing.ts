@@ -12,6 +12,8 @@
 // approval, so the paths below are each lenders documented integration
 // pattern as of this writing, not guaranteed byte-for-byte current).
 
+import { getEnv } from "./env.ts";
+
 export type LenderName = "AFF" | "Koalafi" | "Progressive" | "Snap" | "Kafene";
 
 export interface FinancingApplicant {
@@ -40,9 +42,9 @@ export interface FinancingResult {
 // Dealer API, OAuth2 client-credentials -> Bearer token, per AFFs dealer
 // integration docs. Requires AFF_CLIENT_ID + AFF_CLIENT_SECRET + AFF_DEALER_ID.
 async function submitAFF(applicant: FinancingApplicant): Promise<FinancingResult> {
-  const clientId = Deno.env.get("AFF_CLIENT_ID") ?? "";
-  const clientSecret = Deno.env.get("AFF_CLIENT_SECRET") ?? "";
-  const dealerId = Deno.env.get("AFF_DEALER_ID") ?? "";
+  const clientId = getEnv("AFF_CLIENT_ID") ?? "";
+  const clientSecret = getEnv("AFF_CLIENT_SECRET") ?? "";
+  const dealerId = getEnv("AFF_DEALER_ID") ?? "";
   if (!clientId || !clientSecret || !dealerId) {
     return { configured: false, lender: "AFF", ok: false, message: "AFF not configured (see docs/FINANCING-SETUP.md) -- set AFF_CLIENT_ID, AFF_CLIENT_SECRET, AFF_DEALER_ID." };
   }
@@ -81,8 +83,8 @@ async function submitAFF(applicant: FinancingApplicant): Promise<FinancingResult
 // Dealer/partner API, static API key header. Requires KOALAFI_API_KEY +
 // KOALAFI_MERCHANT_ID.
 async function submitKoalafi(applicant: FinancingApplicant): Promise<FinancingResult> {
-  const apiKey = Deno.env.get("KOALAFI_API_KEY") ?? "";
-  const merchantId = Deno.env.get("KOALAFI_MERCHANT_ID") ?? "";
+  const apiKey = getEnv("KOALAFI_API_KEY") ?? "";
+  const merchantId = getEnv("KOALAFI_MERCHANT_ID") ?? "";
   if (!apiKey || !merchantId) {
     return { configured: false, lender: "Koalafi", ok: false, message: "Koalafi not configured (see docs/FINANCING-SETUP.md) -- set KOALAFI_API_KEY, KOALAFI_MERCHANT_ID." };
   }
@@ -110,8 +112,8 @@ async function submitKoalafi(applicant: FinancingApplicant): Promise<FinancingRe
 // PROGRESSIVE_STORE_NUMBER (Progressive assigns a numeric store id per
 // location at onboarding).
 async function submitProgressive(applicant: FinancingApplicant): Promise<FinancingResult> {
-  const apiKey = Deno.env.get("PROGRESSIVE_API_KEY") ?? "";
-  const storeNumber = Deno.env.get("PROGRESSIVE_STORE_NUMBER") ?? "";
+  const apiKey = getEnv("PROGRESSIVE_API_KEY") ?? "";
+  const storeNumber = getEnv("PROGRESSIVE_STORE_NUMBER") ?? "";
   if (!apiKey || !storeNumber) {
     return { configured: false, lender: "Progressive", ok: false, message: "Progressive Leasing not configured (see docs/FINANCING-SETUP.md) -- set PROGRESSIVE_API_KEY, PROGRESSIVE_STORE_NUMBER." };
   }
@@ -144,8 +146,8 @@ async function submitProgressive(applicant: FinancingApplicant): Promise<Financi
 // Merchant API, static API key header. Requires SNAP_API_KEY +
 // SNAP_MERCHANT_ID.
 async function submitSnap(applicant: FinancingApplicant): Promise<FinancingResult> {
-  const apiKey = Deno.env.get("SNAP_API_KEY") ?? "";
-  const merchantId = Deno.env.get("SNAP_MERCHANT_ID") ?? "";
+  const apiKey = getEnv("SNAP_API_KEY") ?? "";
+  const merchantId = getEnv("SNAP_MERCHANT_ID") ?? "";
   if (!apiKey || !merchantId) {
     return { configured: false, lender: "Snap", ok: false, message: "Snap Finance not configured (see docs/FINANCING-SETUP.md) -- set SNAP_API_KEY, SNAP_MERCHANT_ID." };
   }
@@ -172,8 +174,8 @@ async function submitSnap(applicant: FinancingApplicant): Promise<FinancingResul
 // Partner API, static API key header. Requires KAFENE_API_KEY +
 // KAFENE_RETAILER_ID.
 async function submitKafene(applicant: FinancingApplicant): Promise<FinancingResult> {
-  const apiKey = Deno.env.get("KAFENE_API_KEY") ?? "";
-  const retailerId = Deno.env.get("KAFENE_RETAILER_ID") ?? "";
+  const apiKey = getEnv("KAFENE_API_KEY") ?? "";
+  const retailerId = getEnv("KAFENE_RETAILER_ID") ?? "";
   if (!apiKey || !retailerId) {
     return { configured: false, lender: "Kafene", ok: false, message: "Kafene not configured (see docs/FINANCING-SETUP.md) -- set KAFENE_API_KEY, KAFENE_RETAILER_ID." };
   }
@@ -215,9 +217,9 @@ export async function submitToLender(lender: LenderName, applicant: FinancingApp
 }
 
 export function lenderConfigured(lender: LenderName): boolean {
-  if (lender === "AFF") return Boolean(Deno.env.get("AFF_CLIENT_ID") && Deno.env.get("AFF_CLIENT_SECRET"));
-  if (lender === "Koalafi") return Boolean(Deno.env.get("KOALAFI_API_KEY"));
-  if (lender === "Progressive") return Boolean(Deno.env.get("PROGRESSIVE_API_KEY"));
-  if (lender === "Snap") return Boolean(Deno.env.get("SNAP_API_KEY"));
-  return Boolean(Deno.env.get("KAFENE_API_KEY"));
+  if (lender === "AFF") return Boolean(getEnv("AFF_CLIENT_ID") && getEnv("AFF_CLIENT_SECRET"));
+  if (lender === "Koalafi") return Boolean(getEnv("KOALAFI_API_KEY"));
+  if (lender === "Progressive") return Boolean(getEnv("PROGRESSIVE_API_KEY"));
+  if (lender === "Snap") return Boolean(getEnv("SNAP_API_KEY"));
+  return Boolean(getEnv("KAFENE_API_KEY"));
 }

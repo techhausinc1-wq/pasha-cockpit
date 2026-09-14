@@ -12,13 +12,14 @@ import { SHELL_USERS } from "./rbac.ts";
 import { listApplications, listThreads } from "./sample-data.ts";
 import { listOrders } from "./orders.ts";
 import { countTodaysFinancingEmails, type FinancingEmailTally } from "./gmail.ts";
+import { getEnv } from "./env.ts";
 
 const RESEND_API = "https://api.resend.com/emails";
-const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") ?? "";
-const DIGEST_FROM = Deno.env.get("DIGEST_EMAIL_FROM") ?? "";
+const RESEND_API_KEY = (): string => getEnv("RESEND_API_KEY") ?? "";
+const DIGEST_FROM = (): string => getEnv("DIGEST_EMAIL_FROM") ?? "";
 
 export function resendConfigured(): boolean {
-  return Boolean(RESEND_API_KEY && DIGEST_FROM);
+  return Boolean(RESEND_API_KEY() && DIGEST_FROM());
 }
 
 export interface WorkerDigestRow {
@@ -132,9 +133,9 @@ export async function sendDailyDigestEmail(toEmail: string): Promise<{ ok: boole
   const html = digestToHtml(data);
   const res = await fetch(RESEND_API, {
     method: "POST",
-    headers: { "Authorization": "Bearer " + RESEND_API_KEY, "Content-Type": "application/json" },
+    headers: { "Authorization": "Bearer " + RESEND_API_KEY(), "Content-Type": "application/json" },
     body: JSON.stringify({
-      from: DIGEST_FROM,
+      from: DIGEST_FROM(),
       to: [toEmail],
       subject: "210 Discount Furniture -- Daily Report " + data.date,
       html,

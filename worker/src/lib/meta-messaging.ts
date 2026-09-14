@@ -17,6 +17,7 @@
 //                                in the Meta app's Webhooks config screen
 
 import { getMetaConn } from "./meta-oauth.ts";
+import { getEnv } from "./env.ts";
 
 const GRAPH_VERSION = "v20.0";
 
@@ -36,7 +37,7 @@ export function handleMetaWebhookVerification(url: URL): Response {
   const token = url.searchParams.get("hub.verify_token");
   const challenge = url.searchParams.get("hub.challenge");
 
-  const expected = Deno.env.get("META_WEBHOOK_VERIFY_TOKEN");
+  const expected = getEnv("META_WEBHOOK_VERIFY_TOKEN");
   if (mode === "subscribe" && expected && token === expected && challenge) {
     return new Response(challenge, { status: 200 });
   }
@@ -50,7 +51,7 @@ export async function verifyMetaWebhookSignature(
   rawBody: string,
   signatureHeader: string | null,
 ): Promise<boolean> {
-  const secret = Deno.env.get("META_APP_SECRET");
+  const secret = getEnv("META_APP_SECRET");
   if (!secret) return false;
   if (!signatureHeader || !signatureHeader.startsWith("sha256=")) return false;
   const expectedHex = signatureHeader.slice("sha256=".length);

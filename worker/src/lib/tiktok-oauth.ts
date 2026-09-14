@@ -14,14 +14,15 @@
 //   TIKTOK_CLIENT_KEY
 //   TIKTOK_CLIENT_SECRET
 
-import { getKv, kvGetDoc, kvSetDoc, nanoid } from "./kv.ts";
+import { kvDelete, kvGet, kvGetDoc, kvSet, kvSetDoc, nanoid } from "./kv.ts";
+import { getEnv } from "./env.ts";
 
 const CONN_RES = "tiktok_conn";
 const STATE_RES = "tiktok_oauth_state";
 const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
 
-const TIKTOK_CLIENT_KEY = Deno.env.get("TIKTOK_CLIENT_KEY") ?? "";
-const TIKTOK_CLIENT_SECRET = Deno.env.get("TIKTOK_CLIENT_SECRET") ?? "";
+const TIKTOK_CLIENT_KEY = (): string => getEnv("TIKTOK_CLIENT_KEY") ?? "";
+const TIKTOK_CLIENT_SECRET = (): string => getEnv("TIKTOK_CLIENT_SECRET") ?? "";
 
 export interface TikTokConnection {
   accessToken: string;
@@ -32,7 +33,7 @@ export interface TikTokConnection {
 }
 
 export function tiktokOAuthConfigured(): boolean {
-  return Boolean(TIKTOK_CLIENT_KEY && TIKTOK_CLIENT_SECRET);
+  return Boolean(TIKTOK_CLIENT_KEY() && TIKTOK_CLIENT_SECRET());
 }
 
 export async function getTikTokConn(): Promise<TikTokConnection | null> {
@@ -44,15 +45,12 @@ async function saveTikTokConn(conn: TikTokConnection): Promise<void> {
 }
 
 export async function saveOAuthState(state: string): Promise<void> {
-  const kv = await getKv();
-  await kv.set(["pasha", STATE_RES, state], true, { expireIn: OAUTH_STATE_TTL_MS });
+  await kvSet(STATE_RES, state, true, OAUTH_STATE_TTL_MS);
 }
 export async function consumeOAuthState(state: string): Promise<boolean> {
-  const kv = await getKv();
-  const key = ["pasha", STATE_RES, state];
-  const entry = await kv.get(key);
-  if (!entry.value) return false;
-  await kv.delete(key);
+  const entry = await kvGet<boolean>(STATE_RES, state);
+  if (!entry) return false;
+  await kvDelete(STATE_RES, state);
   return true;
 }
 
@@ -62,7 +60,7 @@ const TIKTOK_SCOPES = ["video.publish", "user.info.basic"];
 
 export function buildAuthUrl(redirectUri: string, state: string): string {
   const auth = new URL("https://www.tiktok.com/v2/auth/authorize/");
-  auth.searchParams.set("client_key", TIKTOK_CLIENT_KEY);
+  auth.searchParams.set("client_key", TIKTOK_CLIENT_KEY());
   auth.searchParams.set("scope", TIKTOK_SCOPES.join(","));
   auth.searchParams.set("response_type", "code");
   auth.searchParams.set("redirect_uri", redirectUri);
@@ -85,8 +83,8 @@ export async function completeConnect(code: string, redirectUri: string): Promis
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded", "Cache-Control": "no-cache" },
     body: new URLSearchParams({
-      client_key: TIKTOK_CLIENT_KEY,
-      client_secret: TIKTOK_CLIENT_SECRET,
+      client_key: TIKTOK_CLIENT_KEY(),
+      client_secret: TIKTOK_CLIENT_SECRET(),
       code,
       grant_type: "authorization_code",
       redirect_uri: redirectUri,
@@ -118,8 +116,8 @@ export async function getValidTikTokAccessToken(): Promise<string | null> {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded", "Cache-Control": "no-cache" },
       body: new URLSearchParams({
-        client_key: TIKTOK_CLIENT_KEY,
-        client_secret: TIKTOK_CLIENT_SECRET,
+        client_key: TIKTOK_CLIENT_KEY(),
+        client_secret: TIKTOK_CLIENT_SECRET(),
         grant_type: "refresh_token",
         refresh_token: conn.refreshToken,
       }),

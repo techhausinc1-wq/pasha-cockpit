@@ -101,17 +101,19 @@ import {
   tiktokOAuthConfigured,
 } from "./lib/tiktok-oauth.ts";
 import { buildDailyDigestData, resendConfigured, sendDailyDigestEmail } from "./lib/digest.ts";
+import { getEnv, setEnv } from "./lib/env.ts";
+import { setKvNamespace, type KvNamespaceLike } from "./lib/kv.ts";
 
-const PORT = parseInt(Deno.env.get("PORT") || "8001");
-// web/data live INSIDE worker/ (worker/docs/, worker/data/), not at the
-// repo root -- `deno deploy` uploads only the tree rooted at worker/ (per
-// worker/deno.json), so a repo-root sibling dir silently never reaches
-// production. Confirmed live: GET / and /api/catalog both 404'd in prod
-// despite working locally, because Deno.readFile couldn't find either
-// directory at all -- same root cause, same fix, for both.
-const WEB_DIR = new URL("../docs/", import.meta.url).pathname;
-const DATA_DIR = new URL("../data/", import.meta.url).pathname;
-const PUBLIC_URL = (Deno.env.get("PUBLIC_URL") ?? "").replace(/\/$/, "");
+// Cloudflare Workers port: static files (formerly worker/docs/,
+// worker/data/, read via Deno.readFile) are now served through the
+// [assets] binding in wrangler.toml (see serveStatic() and readCatalog()
+// below) -- catalog.json was copied into docs/ so a single assets
+// directory covers both, matching the deploy-root gotcha the original
+// Deno comment here described (a sibling dir outside the served root
+// silently 404s in production).
+function publicUrl(): string {
+  return (getEnv("PUBLIC_URL") ?? "").replace(/\/$/, "");
+}
 
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -140,83 +142,100 @@ function htmlRedirect(msg: string, backTo: string): Response {
   return new Response(body, { status: 200, headers: { "Content-Type": "text/html; charset=utf-8" } });
 }
 function selfOrigin(req: Request): string {
-  if (PUBLIC_URL) return PUBLIC_URL;
+  const p = publicUrl();
+  if (p) return p;
   const u = new URL(req.url);
   return u.protocol + "//" + u.host;
 }
 
-async function serveStatic(pathname: string): Promise<Response> {
-  let fsPath: string;
-  if (pathname === "/" || pathname === "") {
-    fsPath = WEB_DIR + "index.html";
-  } else if (pathname === "/catalog.json") {
-    fsPath = DATA_DIR + "catalog.json";
-  } else {
-    fsPath = WEB_DIR + pathname.replace(/^\//, "");
-  }
-  try {
-    const body = await Deno.readFile(fsPath);
-    const ext = fsPath.split(".").pop()!.toLowerCase();
-    const mime = ext === "html"
-      ? "text/html; charset=utf-8"
-      : ext === "css"
-      ? "text/css; charset=utf-8"
-      : ext === "js"
-      ? "application/javascript; charset=utf-8"
-      : ext === "json"
-      ? "application/json; charset=utf-8"
-      : ext === "svg"
-      ? "image/svg+xml"
-      : ext === "png"
-      ? "image/png"
-      : "application/octet-stream";
-    return new Response(body, { status: 200, headers: { "Content-Type": mime, "Cache-Control": "no-cache" } });
-  } catch {
-    return new Response("Not found", { status: 404 });
-  }
+// Cloudflare Workers static-asset serving: the [assets] binding in
+// wrangler.toml (binding = "ASSETS", directory = "../docs") exposes a
+// fetch()-shaped interface over the deployed static files -- the
+// Cloudflare-native equivalent of the old Deno.readFile(WEB_DIR + path)
+// approach. catalog.json was copied into docs/ (see readCatalog() below)
+// so this one binding covers everything the old WEB_DIR/DATA_DIR split did.
+async function serveStatic(pathname: string, assets: Fetcher): Promise<Response> {
+  const assetPath = (pathname === "/" || pathname === "") ? "/index.html" : pathname;
+  const res = await assets.fetch(new Request("https://assets.internal" + assetPath));
+  if (res.status === 404) return new Response("Not found", { status: 404 });
+  // ASSETS sets its own content-type/caching; only add the no-cache header
+  // this app has always served static files with (matches the old
+  // Deno.readFile path's explicit "no-cache" -- this is a small-business
+  // internal tool where seeing a stale cached build after a deploy caused
+  // real confusion before, not a high-traffic site that needs aggressive
+  // asset caching).
+  const headers = new Headers(res.headers);
+  headers.set("Cache-Control", "no-cache");
+  return new Response(res.body, { status: res.status, headers });
+}
+
+// catalog.json is read server-side in two places below (not just served
+// as a static asset to the browser) -- via the same ASSETS binding rather
+// than Deno.readFile, since Cloudflare Workers have no filesystem access
+// at runtime. Cached in-isolate after first read since it's static
+// per-deployment content, not per-request state.
+// deno-lint-ignore no-explicit-any
+let _catalogCache: any = null;
+// deno-lint-ignore no-explicit-any
+async function readCatalog(assets: Fetcher): Promise<any> {
+  if (_catalogCache) return _catalogCache;
+  const res = await assets.fetch(new Request("https://assets.internal/catalog.json"));
+  if (!res.ok) throw new Error("catalog.json not found in ASSETS binding");
+  _catalogCache = await res.json();
+  return _catalogCache;
 }
 
 // ═══════════════════════════════════════════════════════════════════════
 // BOOT SEED -- writes SHELL_USERS (rbac.ts) and every SAMPLE_* resource
-// into Deno KV on first run, so a fresh deploy looks identical to the old
-// hardcoded-array shell. Safe to call every boot: each seeder only writes
-// what does not already exist.
+// into KV on first request, so a fresh deploy looks identical to the old
+// hardcoded-array shell. Each seeder only writes what does not already
+// exist, so this is safe to call more than once -- but Cloudflare
+// Workers isolates are reused across many requests (unlike Deno's
+// once-at-boot model), so `seededThisIsolate` avoids redundant KV reads
+// on every single request within the same isolate's lifetime.
 // ═══════════════════════════════════════════════════════════════════════
-await seedUsersIfEmpty();
-await seedSampleDataIfEmpty();
-await seedScoutIfEmpty();
-await seedCustomersIfEmpty();
-await seedOrdersIfEmpty();
-await seedDeliveriesIfEmpty();
-
-console.log("Pasha cockpit listening on http://localhost:" + PORT);
-console.log("web served from " + WEB_DIR);
-console.log("catalog served from " + DATA_DIR + "catalog.json");
-console.log("Sample PINs: " + SHELL_USERS.map((u) => u.name + "=" + u.pin).join(", "));
-console.log("FAL_KEY (reels): " + (falConfigured() ? "configured" : "not configured -- see docs/AD-ROI-SETUP.md pattern"));
-console.log("Meta OAuth: " + (metaConfigured() ? "configured" : "not configured -- see docs/META-BUSINESS-SETUP.md"));
-console.log("TikTok: " + (await tiktokConfigured() ? "configured" : "not configured -- see docs/TIKTOK-SETUP.md"));
-console.log("Daily digest email: " + (resendConfigured() ? "configured" : "not configured -- see docs/RESEND-DIGEST-SETUP.md"));
+let seededThisIsolate = false;
+async function ensureSeeded(): Promise<void> {
+  if (seededThisIsolate) return;
+  await seedUsersIfEmpty();
+  await seedSampleDataIfEmpty();
+  await seedScoutIfEmpty();
+  await seedCustomersIfEmpty();
+  await seedOrdersIfEmpty();
+  await seedDeliveriesIfEmpty();
+  seededThisIsolate = true;
+}
 
 // Real end-of-day report, sent every night to every owner-level user with
 // a real email on file (Paul, Ivan) -- item 7 of Ivan's "do everything"
 // ask, 2026-09-10. Only fires for real once RESEND_API_KEY/DIGEST_EMAIL_FROM
-// are set; sendDailyDigestEmail() no-ops gracefully until then.
-if (typeof Deno.cron === "function") {
-  Deno.cron("pasha-daily-digest", "0 21 * * *", async () => {
-    if (!resendConfigured()) {
-      console.log("Daily digest cron fired but RESEND_API_KEY/DIGEST_EMAIL_FROM not set -- skipping send.");
-      return;
-    }
-    for (const u of SHELL_USERS) {
-      if (!u.is_master || !u.email) continue;
-      const result = await sendDailyDigestEmail(u.email);
-      console.log("Daily digest to " + u.email + ": " + (result.ok ? "sent" : "failed -- " + result.error));
-    }
-  });
+// are set; sendDailyDigestEmail() no-ops gracefully until then. Invoked
+// from the scheduled() handler below (Cloudflare Cron Trigger, see
+// wrangler.toml [triggers] crons -- same "0 21 * * *" schedule as the old
+// Deno.cron call, both UTC).
+async function runDailyDigest(): Promise<void> {
+  if (!resendConfigured()) {
+    console.log("Daily digest cron fired but RESEND_API_KEY/DIGEST_EMAIL_FROM not set -- skipping send.");
+    return;
+  }
+  for (const u of SHELL_USERS) {
+    if (!u.is_master || !u.email) continue;
+    const result = await sendDailyDigestEmail(u.email);
+    console.log("Daily digest to " + u.email + ": " + (result.ok ? "sent" : "failed -- " + result.error));
+  }
 }
 
-Deno.serve({ port: PORT }, async (req: Request) => {
+interface Env {
+  KV: KvNamespaceLike;
+  ASSETS: Fetcher;
+  [key: string]: unknown; // every secret/var below is read through getEnv(), not a typed field here
+}
+
+async function handleRequest(req: Request, env: Env): Promise<Response> {
+  setEnv(env as unknown as Record<string, string | undefined>);
+  setKvNamespace(env.KV);
+  await ensureSeeded();
+
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: CORS_HEADERS });
   }
@@ -284,7 +303,7 @@ Deno.serve({ port: PORT }, async (req: Request) => {
 
   // ── static (no auth) ──────────────────────────────────────────────────
   if (!path.startsWith("/api/")) {
-    return serveStatic(path);
+    return serveStatic(path, env.ASSETS);
   }
 
   // ── public API routes ────────────────────────────────────────────────
@@ -568,8 +587,7 @@ Deno.serve({ port: PORT }, async (req: Request) => {
     let productMatch = body.product_match;
     if (!productMatch && thread?.product_slug) {
       try {
-        const catalogText = await Deno.readFile(new URL("../data/catalog.json", import.meta.url));
-        const catalog = JSON.parse(new TextDecoder().decode(catalogText));
+        const catalog = await readCatalog(env.ASSETS);
         // deno-lint-ignore no-explicit-any
         const p = (catalog.products || []).find((x: any) => x.slug === thread.product_slug);
         if (p) {
@@ -608,9 +626,7 @@ Deno.serve({ port: PORT }, async (req: Request) => {
   // ── catalog ──────────────────────────────────────────────────────────
   if (path === "/api/catalog" && req.method === "GET") {
     if (!can("catalog.read")) return json({ error: "forbidden", missing_atom: "catalog.read" }, 403);
-    const body = await Deno.readFile(DATA_DIR + "catalog.json");
-    const text = new TextDecoder().decode(body);
-    const data = JSON.parse(text);
+    const data = await readCatalog(env.ASSETS);
     return json(data);
   }
 
@@ -894,4 +910,17 @@ Deno.serve({ port: PORT }, async (req: Request) => {
   }
 
   return json({ error: "not_found", path }, 404);
-});
+}
+
+export default {
+  async fetch(req: Request, env: Env): Promise<Response> {
+    return handleRequest(req, env);
+  },
+  // Cloudflare Cron Trigger -- see wrangler.toml [triggers] crons. Same
+  // "0 21 * * *" (9pm UTC) schedule the old Deno.cron call used.
+  async scheduled(_event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    setEnv(env as unknown as Record<string, string | undefined>);
+    setKvNamespace(env.KV);
+    ctx.waitUntil(runDailyDigest());
+  },
+};
