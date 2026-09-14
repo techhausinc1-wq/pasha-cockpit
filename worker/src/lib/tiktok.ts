@@ -4,6 +4,8 @@
 // configured" fallback used throughout this worker. See
 // docs/TIKTOK-SETUP.md for the developer-portal steps.
 
+import { getTikTokConn, getValidTikTokAccessToken } from "./tiktok-oauth.ts";
+
 export interface TikTokPublishResult {
   configured: boolean;
   ok: boolean;
@@ -21,9 +23,12 @@ export interface TikTokPublishResult {
 // token already exists in the env for now, same "inert until credentials
 // are supplied" pattern as the rest of item 6).
 export async function publishToTikTok(videoUrl: string, caption: string): Promise<TikTokPublishResult> {
-  const accessToken = Deno.env.get("TIKTOK_ACCESS_TOKEN") ?? "";
+  // Prefer a real OAuth connection (lib/tiktok-oauth.ts, auto-refreshed)
+  // over the static env var -- the env var remains a valid fallback for
+  // manual/testing use per docs/TIKTOK-SETUP.md Phase 1 step 7.
+  const accessToken = (await getValidTikTokAccessToken()) ?? Deno.env.get("TIKTOK_ACCESS_TOKEN") ?? "";
   if (!accessToken) {
-    return { configured: false, ok: false, message: "TikTok not configured (see docs/TIKTOK-SETUP.md) -- set TIKTOK_ACCESS_TOKEN." };
+    return { configured: false, ok: false, message: "TikTok not configured (see docs/TIKTOK-SETUP.md) -- connect via /oauth/tiktok/start or set TIKTOK_ACCESS_TOKEN." };
   }
   try {
     const res = await fetch("https://open.tiktokapis.com/v2/post/publish/video/init/", {
@@ -56,6 +61,7 @@ export async function publishToTikTok(videoUrl: string, caption: string): Promis
   }
 }
 
-export function tiktokConfigured(): boolean {
-  return Boolean(Deno.env.get("TIKTOK_ACCESS_TOKEN"));
+export async function tiktokConfigured(): Promise<boolean> {
+  if (Deno.env.get("TIKTOK_ACCESS_TOKEN")) return true;
+  return Boolean(await getTikTokConn());
 }

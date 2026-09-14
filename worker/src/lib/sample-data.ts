@@ -92,6 +92,50 @@ export async function upsertWhatsAppThread(msg: {
   await kvSet(THREADS_RES, thread.id, thread);
 }
 
+// Same shape as upsertWhatsAppThread, generalized for Messenger ("pg") and
+// Instagram ("ig") DMs -- see lib/meta-messaging.ts. One function instead of
+// two near-identical copies since the only real difference is the surface
+// label and account_id/account_label source.
+export async function upsertMetaThread(msg: {
+  surface: "pg" | "ig";
+  senderId: string; // PSID (Messenger) or IGSID (Instagram)
+  senderName: string | null;
+  accountId: string; // the connected Page ID or IG business ID this came in on
+  accountLabel: string;
+  text: string;
+  timestamp: string;
+}): Promise<void> {
+  const all = await kvList<SampleThread>(THREADS_RES);
+  let thread = all.find((t) => t.customer_handle === msg.senderId && t.surface === msg.surface);
+  if (!thread) {
+    thread = {
+      id: msg.surface + "_" + msg.senderId,
+      account_id: msg.accountId,
+      account_label: msg.accountLabel,
+      surface: msg.surface,
+      customer_handle: msg.senderId,
+      customer_name: msg.senderName || msg.senderId,
+      worker_id: null,
+      status: "active",
+      intent: "general",
+      product_slug: null,
+      last_message_at: msg.timestamp,
+      last_message_from: "customer",
+      unread: true,
+      preview: msg.text,
+      _ord: Date.now(),
+    };
+  } else {
+    thread.last_message_at = msg.timestamp;
+    thread.last_message_from = "customer";
+    thread.unread = true;
+    thread.preview = msg.text;
+    thread._ord = Date.now();
+    if (msg.senderName) thread.customer_name = msg.senderName;
+  }
+  await kvSet(THREADS_RES, thread.id, thread);
+}
+
 export async function markThreadSent(customerHandle: string, text: string): Promise<void> {
   const all = await kvList<SampleThread>(THREADS_RES);
   const thread = all.find((t) => t.customer_handle === customerHandle);

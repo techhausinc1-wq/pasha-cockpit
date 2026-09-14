@@ -40,6 +40,7 @@ import {
   listThreads,
   markThreadSent,
   seedSampleDataIfEmpty,
+  upsertMetaThread,
   upsertWhatsAppThread,
 } from "./lib/sample-data.ts";
 import {
@@ -83,9 +84,22 @@ import {
   metaConfigured,
   startConnect,
 } from "./lib/meta-oauth.ts";
+import {
+  handleMetaWebhookVerification,
+  parseMetaWebhookPayload,
+  resolveMetaAccountLabel,
+  resolveMetaSenderName,
+  verifyMetaWebhookSignature,
+} from "./lib/meta-messaging.ts";
 import { lenderConfigured, submitToLender, type LenderName } from "./lib/financing.ts";
 import { adPlatformsConfigured, getGoogleAdInsights, getMetaAdInsights, getTikTokAdInsights } from "./lib/ad-platforms.ts";
 import { publishToTikTok, tiktokConfigured } from "./lib/tiktok.ts";
+import {
+  completeConnect as completeTikTokConnect,
+  consumeOAuthState as consumeTikTokOAuthState,
+  startConnect as startTikTokConnect,
+  tiktokOAuthConfigured,
+} from "./lib/tiktok-oauth.ts";
 import { buildDailyDigestData, resendConfigured, sendDailyDigestEmail } from "./lib/digest.ts";
 
 const PORT = parseInt(Deno.env.get("PORT") || "8001");
@@ -181,7 +195,7 @@ console.log("catalog served from " + DATA_DIR + "catalog.json");
 console.log("Sample PINs: " + SHELL_USERS.map((u) => u.name + "=" + u.pin).join(", "));
 console.log("FAL_KEY (reels): " + (falConfigured() ? "configured" : "not configured -- see docs/AD-ROI-SETUP.md pattern"));
 console.log("Meta OAuth: " + (metaConfigured() ? "configured" : "not configured -- see docs/META-BUSINESS-SETUP.md"));
-console.log("TikTok: " + (tiktokConfigured() ? "configured" : "not configured -- see docs/TIKTOK-SETUP.md"));
+console.log("TikTok: " + (await tiktokConfigured() ? "configured" : "not configured -- see docs/TIKTOK-SETUP.md"));
 console.log("Daily digest email: " + (resendConfigured() ? "configured" : "not configured -- see docs/RESEND-DIGEST-SETUP.md"));
 
 // Real end-of-day report, sent every night to every owner-level user with
@@ -234,6 +248,35 @@ Deno.serve({ port: PORT }, async (req: Request) => {
       const redirectUri = selfOrigin(req) + "/oauth/facebook/callback";
       await completeConnect(code, redirectUri);
       return htmlRedirect("Facebook connected. Returning to 210 Cockpit...", "/#live");
+    } catch (e) {
+      return htmlRedirect("Connect failed: " + (e instanceof Error ? e.message : String(e)), "/#live");
+    }
+  }
+
+  // ── TikTok OAuth (Login Kit) -- the callback route docs/TIKTOK-SETUP.md
+  // Phase 1 step 5 flagged as "does not exist yet; the natural next step."
+  // Same public-GET/?token= shape as the Facebook routes above.
+  if (path === "/oauth/tiktok/start" && req.method === "GET") {
+    const user = await userFromToken(url.searchParams.get("token") || "");
+    if (!user) return bad("Unauthorized", 401);
+    if (!effectiveAtoms(user).has("config.integrations")) return bad("Forbidden -- missing atom config.integrations", 403);
+    if (!tiktokOAuthConfigured()) return bad("TIKTOK_CLIENT_KEY/TIKTOK_CLIENT_SECRET not set on this deployment -- see docs/TIKTOK-SETUP.md", 500);
+    const redirectUri = selfOrigin(req) + "/oauth/tiktok/callback";
+    const authUrl = await startTikTokConnect(redirectUri);
+    return Response.redirect(authUrl, 302);
+  }
+  if (path === "/oauth/tiktok/callback" && req.method === "GET") {
+    const code = url.searchParams.get("code");
+    const state = url.searchParams.get("state") || "";
+    const errParam = url.searchParams.get("error");
+    if (errParam) return htmlRedirect("TikTok denied: " + errParam, "/#live");
+    if (!code) return bad("Missing code", 400);
+    const validState = await consumeTikTokOAuthState(state);
+    if (!validState) return bad("Invalid or expired state", 400);
+    try {
+      const redirectUri = selfOrigin(req) + "/oauth/tiktok/callback";
+      await completeTikTokConnect(code, redirectUri);
+      return htmlRedirect("TikTok connected. Returning to 210 Cockpit...", "/#live");
     } catch (e) {
       return htmlRedirect("Connect failed: " + (e instanceof Error ? e.message : String(e)), "/#live");
     }
@@ -295,6 +338,48 @@ Deno.serve({ port: PORT }, async (req: Request) => {
     for (const msg of inbound) {
       await upsertWhatsAppThread(msg);
       await findOrCreateCustomer({ name: msg.name || msg.wa_id, phone: msg.wa_id, whatsapp_id: msg.wa_id });
+    }
+    return json({ received: inbound.length });
+  }
+
+  // ── Messenger/Instagram DM webhook -- no auth; Meta calls these directly.
+  // Code-complete, cannot receive real traffic until Meta grants
+  // pages_messaging + instagram_manage_messages via App Review (see
+  // docs/META-BUSINESS-SETUP.md Phase 3) -- same honest-gap pattern as
+  // everything else in this worker, not faked in the meantime.
+  if (path === "/api/meta/webhook" && req.method === "GET") {
+    return handleMetaWebhookVerification(url);
+  }
+  if (path === "/api/meta/webhook" && req.method === "POST") {
+    const rawBody = await req.text();
+    const signature = req.headers.get("x-hub-signature-256");
+    const validSig = await verifyMetaWebhookSignature(rawBody, signature);
+    if (!validSig) {
+      console.warn("Meta webhook: invalid or missing signature, rejecting");
+      return json({ error: "invalid_signature" }, 403);
+    }
+    let payload: unknown;
+    try {
+      payload = JSON.parse(rawBody);
+    } catch {
+      return json({ error: "invalid_json" }, 400);
+    }
+    const inbound = parseMetaWebhookPayload(payload);
+    for (const msg of inbound) {
+      const [senderName, accountLabel] = await Promise.all([
+        resolveMetaSenderName(msg.surface, msg.recipientId, msg.senderId),
+        resolveMetaAccountLabel(msg.surface, msg.recipientId),
+      ]);
+      await upsertMetaThread({
+        surface: msg.surface,
+        senderId: msg.senderId,
+        senderName,
+        accountId: msg.recipientId,
+        accountLabel,
+        text: msg.text,
+        timestamp: msg.timestamp,
+      });
+      await findOrCreateCustomer({ name: senderName || msg.senderId, phone: null, whatsapp_id: null });
     }
     return json({ received: inbound.length });
   }
