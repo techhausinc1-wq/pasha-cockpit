@@ -900,7 +900,7 @@ const I18N = {
     nav_customers: 'Clientes',
     nav_ads: 'Publicidad',
     nav_team: 'Equipo',
-    nav_live: 'En vivo',
+    nav_live: 'Operaciones',
     nav_alerts: 'Alertas',
     alerts_intro: 'Condiciones reales que necesitan tu atencion -- facturas vencidas y financiamiento pendiente hace mas de 24h.',
     alerts_empty: 'Sin alertas activas en este momento.',
@@ -1129,7 +1129,7 @@ const I18N = {
     nav_customers: 'Customers',
     nav_ads: 'Ads',
     nav_team: 'Team',
-    nav_live: 'Live',
+    nav_live: 'Operations',
     nav_alerts: 'Alerts',
     alerts_intro: 'Real conditions that need your attention -- overdue supplier invoices and financing stuck pending over 24h.',
     alerts_empty: 'No active alerts right now.',
@@ -1359,7 +1359,7 @@ const I18N = {
     nav_ads: 'Реклама',
     nav_reels: 'Видео',
     nav_team: 'Команда',
-    nav_live: 'Онлайн',
+    nav_live: 'Операции',
     nav_alerts: 'Оповещения',
     alerts_intro: 'Реальные ситуации, требующие внимания -- просроченные счета поставщиков и финансирование в ожидании более 24 часов.',
     alerts_empty: 'Сейчас активных оповещений нет.',
@@ -4680,13 +4680,13 @@ function renderLive() {
   }
 
   if (LIVE_DATA.loading) {
-    document.getElementById("view-live").innerHTML = `<h3>Live Ops</h3>${configHtml}<div class="empty">Loading...</div>`;
+    document.getElementById("view-live").innerHTML = `<h3>Operations</h3>${configHtml}<div class="empty">Loading...</div>`;
     return;
   }
 
   if (LIVE_DATA.error) {
     document.getElementById("view-live").innerHTML = `
-      <h3>Live Ops</h3>${configHtml}
+      <h3>Operations</h3>${configHtml}
       <div class="card attn"><div class="card-title">Could not reach the worker</div>
       <div style="font-size:12px; margin-top:6px;">${LIVE_DATA.error}</div></div>
       <button class="btn ghost" onclick="refreshLiveData()">Retry</button>
@@ -4699,7 +4699,7 @@ function renderLive() {
     return;
   }
   const html = `
-    <h3>Live Ops</h3>
+    <h3>Operations</h3>
     ${configHtml}
     <div style="display:flex; justify-content:flex-end; margin:10px 0;"><button class="btn ghost" onclick="refreshLiveData()">Refresh</button></div>
 
