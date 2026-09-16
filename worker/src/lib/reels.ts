@@ -18,6 +18,7 @@ const ANTHROPIC_API = "https://api.anthropic.com/v1/messages";
 const MODEL = "claude-sonnet-4-5";
 const FAL_KEY = (): string => getEnv("FAL_KEY") ?? "";
 const FAL_VIDEO_APP = "fal-ai/kling-video/v2.5-turbo/pro/image-to-video";
+const FAL_TEXT_VIDEO_APP = "fal-ai/kling-video/v2.5-turbo/pro/text-to-video";
 const REEL_JOB_TTL_MS = 60 * 60 * 1000;
 const RES = "reel_jobs";
 
@@ -112,6 +113,72 @@ async function falResult(responseUrl: string): Promise<any> {
   return res.json();
 }
 
+// ── Clip stitching -- real N-clip concatenation into one continuous video ───
+// Kling caps every single generation at 10s (fal's own published schema:
+// enum values 5/10, no higher option). A genuinely longer video needs
+// multiple separate generations stitched end to end via fal-ai/ffmpeg-api/
+// compose -- ONE video track with sequential keyframes (increasing
+// timestamps), not the simultaneous-tracks-at-timestamp-0 shape used for a
+// logo overlay elsewhere in this portfolio (see igor-hq/worker/main.ts's
+// kostyaSubmitBranding for that other shape). Built 2026-09-14 for the
+// Oxana (Bread by Oxana) proposal's "3x 30-second video" ask.
+const FAL_COMPOSE_APP = "fal-ai/ffmpeg-api/compose";
+export interface StitchJob {
+  stage: "pending" | "done" | "error";
+  statusUrl?: string;
+  responseUrl?: string;
+  videoUrl?: string;
+  error?: string;
+  createdAt: number;
+}
+const STITCH_RES = "stitch_jobs";
+export async function startStitchJob(videoUrls: string[]): Promise<string> {
+  if (videoUrls.length < 2) throw new Error("stitch needs at least 2 video URLs");
+  const jobId = nanoid();
+  const clipDurationMs = 10_000;
+  const submitted = await falSubmit(FAL_COMPOSE_APP, {
+    tracks: [
+      {
+        id: "video",
+        type: "video",
+        keyframes: videoUrls.map((url, i) => ({ timestamp: i * clipDurationMs, duration: clipDurationMs, url })),
+      },
+    ],
+  });
+  const job: StitchJob = { stage: "pending", statusUrl: submitted.status_url, responseUrl: submitted.response_url, createdAt: Date.now() };
+  await kvSet(STITCH_RES, jobId, job, REEL_JOB_TTL_MS);
+  return jobId;
+}
+export async function advanceStitchJob(jobId: string): Promise<StitchJob | null> {
+  const job = await kvGet<StitchJob>(STITCH_RES, jobId);
+  if (!job || job.stage === "done" || job.stage === "error") return job;
+  try {
+    const s = await falStatus(job.statusUrl!);
+    if (s.status === "COMPLETED") {
+      const result = await falResult(job.responseUrl!);
+      // fal-ai/ffmpeg-api/compose's real output schema is flat ({video_url,
+      // thumbnail_url}), NOT the nested {video:{url}} shape the Kling
+      // generation and audio-merge apps return -- confirmed against fal's
+      // own published API docs after a real job returned "no video URL"
+      // with the nested-shape assumption. Different app, different schema;
+      // don't assume all fal.ai video-producing apps share one response shape.
+      const videoUrl = result?.video_url;
+      if (!videoUrl) throw new Error("Stitch completed but returned no video URL (raw result: " + JSON.stringify(result).slice(0, 300) + ")");
+      job.videoUrl = videoUrl;
+      job.stage = "done";
+    } else if (s.status === "ERROR" || s.status === "FAILED") {
+      job.stage = "error";
+      job.error = "Stitch failed on fal.ai's side.";
+    }
+    await kvSet(STITCH_RES, jobId, job, REEL_JOB_TTL_MS);
+  } catch (e) {
+    job.stage = "error";
+    job.error = e instanceof Error ? e.message : String(e);
+    await kvSet(STITCH_RES, jobId, job, REEL_JOB_TTL_MS);
+  }
+  return job;
+}
+
 const REEL_VIDEO_PROMPT =
   "Slow, subtle cinematic pan and gentle zoom across this furniture showroom photo, as if a professional product videographer shot it. No fast movement, no camera shake, no distortion of the furniture.";
 
@@ -168,6 +235,55 @@ export async function startReel(
   };
   await kvSet(RES, jobId, job, REEL_JOB_TTL_MS);
   return { configured: true, jobId, captions, message: "Captions generated, video rendering started." };
+}
+
+// Ad-hoc single-shot video generation with a caller-supplied prompt/duration,
+// bypassing the fixed REEL_VIDEO_PROMPT/5s furniture defaults above. Reuses
+// the same RES job store and ReelJob shape so the existing advanceReel()
+// polling logic works unchanged -- only the submission differs.
+export async function startCustomVideo(
+  imageUrl: string,
+  prompt: string,
+  duration: "5" | "10" = "10",
+): Promise<{ jobId: string }> {
+  const submitted = await falSubmit(FAL_VIDEO_APP, {
+    prompt,
+    image_url: imageUrl,
+    duration,
+  });
+  const jobId = nanoid();
+  const job: ReelJob = {
+    stage: "video_pending",
+    theme: "custom",
+    videoStatusUrl: submitted.status_url,
+    videoResponseUrl: submitted.response_url,
+    createdAt: Date.now(),
+  };
+  await kvSet(RES, jobId, job, REEL_JOB_TTL_MS);
+  return { jobId };
+}
+
+// Generic (no-face) demo clips -- text-to-video, not tied to any real
+// person's photo/likeness. Used for capability-example content where we
+// don't have real footage of the actual action yet.
+export async function startTextVideo(
+  prompt: string,
+  duration: "5" | "10" = "10",
+): Promise<{ jobId: string }> {
+  const submitted = await falSubmit(FAL_TEXT_VIDEO_APP, {
+    prompt,
+    duration,
+  });
+  const jobId = nanoid();
+  const job: ReelJob = {
+    stage: "video_pending",
+    theme: "custom-text",
+    videoStatusUrl: submitted.status_url,
+    videoResponseUrl: submitted.response_url,
+    createdAt: Date.now(),
+  };
+  await kvSet(RES, jobId, job, REEL_JOB_TTL_MS);
+  return { jobId };
 }
 
 export async function advanceReel(jobId: string): Promise<ReelJob | null> {

@@ -75,7 +75,7 @@ import {
   seedDeliveriesIfEmpty,
   updateDeliveryStatus,
 } from "./lib/deliveries.ts";
-import { falConfigured, generateCaptions, PROMO_TAGS, startReel, advanceReel } from "./lib/reels.ts";
+import { falConfigured, generateCaptions, PROMO_TAGS, startReel, advanceReel, startStitchJob, advanceStitchJob, startCustomVideo, startTextVideo } from "./lib/reels.ts";
 import { listProspects, logOutreach, runScoutSearch, saveProspect, seedScoutIfEmpty, updateProspect } from "./lib/scout.ts";
 import {
   completeConnect,
@@ -492,6 +492,49 @@ async function handleRequest(req: Request, env: Env): Promise<Response> {
     return json({ lenders: lenders.map((l) => ({ name: l, configured: lenderConfigured(l) })) });
   }
 
+  // ── alerts -- real conditions surfaced from data that's already live,
+  // no external credentials needed. Answers Ivan's "set alerts" ask for
+  // the two categories with a real underlying data source today
+  // (overdue supplier invoices, financing stuck pending); the third
+  // permission atom (notifications.regulatory) stays unused -- there's
+  // no real regulatory-deadline data source in this system yet, and this
+  // route won't invent one. ─────────────────────────────────────────────
+  if (path === "/api/alerts" && req.method === "GET") {
+    const alerts: Array<{ id: string; type: string; severity: string; title: string; detail: string; created_at: string }> = [];
+    if (can("notifications.supplier")) {
+      const overdue = (await listAP()).filter((inv) => inv.status === "overdue");
+      for (const inv of overdue) {
+        alerts.push({
+          id: "alert_ap_" + inv.id,
+          type: "supplier",
+          severity: "high",
+          title: inv.supplier + " invoice overdue",
+          detail: "$" + inv.amount + " (" + inv.invoice_no + ") was due " + inv.due_date,
+          created_at: inv.due_date,
+        });
+      }
+    }
+    if (can("notifications.lender")) {
+      const stuck = (await listApplications()).filter((a) => a.status === "in-progress");
+      for (const a of stuck) {
+        const last = a.lender_attempts[a.lender_attempts.length - 1];
+        if (!last || last.decision !== "pending") continue;
+        const ageMs = Date.now() - new Date(last.at).getTime();
+        if (ageMs < 24 * 3600 * 1000) continue;
+        alerts.push({
+          id: "alert_fin_" + a.id,
+          type: "lender",
+          severity: "medium",
+          title: a.customer_name + "'s financing has been pending over 24h",
+          detail: "Ticket #" + a.ticket + " -- " + last.lender + " decision still pending since " + last.at,
+          created_at: last.at,
+        });
+      }
+    }
+    alerts.sort((x, y) => (x.created_at < y.created_at ? 1 : -1));
+    return json({ alerts, generated_at: new Date().toISOString() });
+  }
+
   // ── money ────────────────────────────────────────────────────────────
   if (path === "/api/money/ap" && req.method === "GET") {
     if (!can("money.read.ap-aging")) return json({ error: "forbidden", missing_atom: "money.read.ap-aging" }, 403);
@@ -770,12 +813,67 @@ async function handleRequest(req: Request, env: Env): Promise<Response> {
       return json({ error: "reel_generation_failed", detail: String(err) }, 502);
     }
   }
+  if (path === "/api/reels/custom-generate" && req.method === "POST") {
+    if (!can("reels.write")) return json({ error: "forbidden", missing_atom: "reels.write" }, 403);
+    let body: { imageUrl?: string; prompt?: string; duration?: "5" | "10" };
+    try {
+      body = await req.json();
+    } catch {
+      return json({ error: "invalid_json" }, 400);
+    }
+    if (!body.imageUrl || !body.prompt) return json({ error: "imageUrl_and_prompt_required" }, 400);
+    try {
+      const result = await startCustomVideo(body.imageUrl, body.prompt, body.duration || "10");
+      return json(result);
+    } catch (err) {
+      return json({ error: "custom_generation_failed", detail: String(err) }, 502);
+    }
+  }
+  if (path === "/api/reels/text-generate" && req.method === "POST") {
+    if (!can("reels.write")) return json({ error: "forbidden", missing_atom: "reels.write" }, 403);
+    let body: { prompt?: string; duration?: "5" | "10" };
+    try {
+      body = await req.json();
+    } catch {
+      return json({ error: "invalid_json" }, 400);
+    }
+    if (!body.prompt) return json({ error: "prompt_required" }, 400);
+    try {
+      const result = await startTextVideo(body.prompt, body.duration || "10");
+      return json(result);
+    } catch (err) {
+      return json({ error: "text_generation_failed", detail: String(err) }, 502);
+    }
+  }
   if (path.startsWith("/api/reels/status/") && req.method === "GET") {
     if (!can("reels.write")) return json({ error: "forbidden", missing_atom: "reels.write" }, 403);
     const jobId = path.slice("/api/reels/status/".length);
     const job = await advanceReel(jobId);
     if (!job) return json({ error: "not_found" }, 404);
     return json({ stage: job.stage, done: job.stage === "done", error: job.error, videoUrl: job.videoUrl, captions: job.captions });
+  }
+  if (path === "/api/reels/stitch" && req.method === "POST") {
+    if (!can("reels.write")) return json({ error: "forbidden", missing_atom: "reels.write" }, 403);
+    let body: { videoUrls?: string[] };
+    try {
+      body = await req.json();
+    } catch {
+      return json({ error: "invalid_json" }, 400);
+    }
+    if (!body.videoUrls || body.videoUrls.length < 2) return json({ error: "videoUrls_min_2_required" }, 400);
+    try {
+      const jobId = await startStitchJob(body.videoUrls);
+      return json({ jobId });
+    } catch (err) {
+      return json({ error: "stitch_failed", detail: String(err) }, 502);
+    }
+  }
+  if (path.startsWith("/api/reels/stitch-status/") && req.method === "GET") {
+    if (!can("reels.write")) return json({ error: "forbidden", missing_atom: "reels.write" }, 403);
+    const jobId = path.slice("/api/reels/stitch-status/".length);
+    const job = await advanceStitchJob(jobId);
+    if (!job) return json({ error: "not_found" }, 404);
+    return json({ stage: job.stage, done: job.stage === "done", error: job.error, videoUrl: job.videoUrl });
   }
   if (path === "/api/reels/publish/tiktok" && req.method === "POST") {
     if (!can("reels.write")) return json({ error: "forbidden", missing_atom: "reels.write" }, 403);

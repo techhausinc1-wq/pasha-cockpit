@@ -865,6 +865,7 @@ h3 {
   <section class="view" id="view-reels"></section>
   <section class="view" id="view-team"></section>
   <section class="view" id="view-live"></section>
+  <section class="view" id="view-alerts"></section>
 </main>
 
 <div class="modal-back" id="modal" onclick="if(event.target===this)closeModal()">
@@ -886,7 +887,7 @@ h3 {
    Bilingual ES/EN · 6 modules · per-user permissions
    ============================================================ */
 
-const TODAY = '2026-06-09';
+const TODAY = new Date().toISOString().slice(0, 10);
 
 /* -------- I18N -------- */
 const I18N = {
@@ -900,6 +901,9 @@ const I18N = {
     nav_ads: 'Publicidad',
     nav_team: 'Equipo',
     nav_live: 'En vivo',
+    nav_alerts: 'Alertas',
+    alerts_intro: 'Condiciones reales que necesitan tu atencion -- facturas vencidas y financiamiento pendiente hace mas de 24h.',
+    alerts_empty: 'Sin alertas activas en este momento.',
     nav_reels: 'Videos',
     nav_scout: 'Scout',
     nav_order: 'Pedido rápido',
@@ -938,6 +942,7 @@ const I18N = {
     reels_publish_fb: 'Publicar en Facebook',
     reels_publish_ig: 'Publicar en Instagram',
     reels_publish_tt: 'Publicar en TikTok',
+    reels_publish_yt: 'Publicar en YouTube',
     reels_recent: 'Reels recientes',
     theme_memorial_day: 'Memorial Day · Sale 25%',
     theme_july4: '4 de Julio · Red White Blue',
@@ -1125,6 +1130,9 @@ const I18N = {
     nav_ads: 'Ads',
     nav_team: 'Team',
     nav_live: 'Live',
+    nav_alerts: 'Alerts',
+    alerts_intro: 'Real conditions that need your attention -- overdue supplier invoices and financing stuck pending over 24h.',
+    alerts_empty: 'No active alerts right now.',
     nav_reels: 'Videos',
     nav_scout: 'Scout',
     nav_order: 'Easy order',
@@ -1163,6 +1171,7 @@ const I18N = {
     reels_publish_fb: 'Publish to Facebook',
     reels_publish_ig: 'Publish to Instagram',
     reels_publish_tt: 'Publish to TikTok',
+    reels_publish_yt: 'Publish to YouTube',
     reels_recent: 'Recent reels',
     theme_memorial_day: 'Memorial Day · 25% Sale',
     theme_july4: 'July 4th · Red White Blue',
@@ -1351,6 +1360,9 @@ const I18N = {
     nav_reels: 'Видео',
     nav_team: 'Команда',
     nav_live: 'Онлайн',
+    nav_alerts: 'Оповещения',
+    alerts_intro: 'Реальные ситуации, требующие внимания -- просроченные счета поставщиков и финансирование в ожидании более 24 часов.',
+    alerts_empty: 'Сейчас активных оповещений нет.',
     auto_reply_card: 'Автоответ включён',
     auto_reply_intro: '99% сообщений — это "это ещё в наличии?". Система отправляет шаблонный ответ через 30 секунд. Если ответишь первым — ничего не отправится. Если клиент пишет ещё раз после автоответа — уведомление получит вся команда.',
     auto_reply_queue: 'В очереди на автоответ',
@@ -1531,6 +1543,7 @@ const I18N = {
     reels_publish_fb: 'Опубликовать в Facebook',
     reels_publish_ig: 'Опубликовать в Instagram',
     reels_publish_tt: 'Опубликовать в TikTok',
+    reels_publish_yt: 'Опубликовать на YouTube',
     reels_recent: 'Недавние ролики',
     theme_memorial_day: 'Memorial Day · скидка 25%',
     theme_july4: '4 июля · красный-белый-синий',
@@ -1817,7 +1830,8 @@ function renderNav() {
     ['scout', 'nav_scout'],
     ['reels', 'nav_reels'],
     ['team', 'nav_team'],
-    ['live', 'nav_live']
+    ['live', 'nav_live'],
+    ['alerts', 'nav_alerts']
   ];
   document.getElementById('nav').innerHTML = tabs.map(([v, k]) =>
     `<button data-view="${v}" class="${v === CURRENT_VIEW ? 'active' : ''}" onclick="setView('${v}')">${t(k)}</button>`
@@ -1846,40 +1860,71 @@ function renderView() {
   if (CURRENT_VIEW === 'reels') renderReels();
   if (CURRENT_VIEW === 'team') renderTeam();
   if (CURRENT_VIEW === 'live') renderLive();
+  if (CURRENT_VIEW === 'alerts') renderAlerts();
 }
 
 /* ============================================================
    MORNING VIEW — Paul's daily wake-up brief
    ============================================================ */
 function renderMorning() {
+  if (!liveAutoLoaded && LIVE_DATA.dashboard === null && !LIVE_DATA.loading) {
+    liveAutoLoaded = true;
+    refreshLiveData();
+  }
+  if (LIVE_DATA.loading || LIVE_DATA.dashboard === null) {
+    document.getElementById('view-morning').innerHTML = `
+      <div class="greet-strip"><div class="greet-name">${new Date().getHours() < 12 ? t('greet_morning') : t('greet_afternoon')}, <em>${CURRENT_USER.name.split(' ')[0]}</em></div></div>
+      <div class="card"><div class="empty">${LIVE_DATA.error ? 'Could not reach the worker: ' + LIVE_DATA.error : 'Loading real data...'}</div>
+      ${LIVE_DATA.error ? '<button class="btn ghost" onclick="refreshLiveData()">Retry</button>' : ''}</div>
+    `;
+    return;
+  }
+  return renderMorningReal();
+}
+function renderMorningReal() {
   const greet = new Date().getHours() < 12 ? t('greet_morning') : t('greet_afternoon');
   const dateStr = formatDate(TODAY);
-  const unreadNow = THREADS.filter(t => t.unread).length;
+  const allThreads = LIVE_DATA.allThreads || [];
+  const unreadNow = allThreads.filter(t => t.unread).length;
+  const dash = LIVE_DATA.dashboard || { stats: [], trucks: [], worker_leaderboard: [] };
+  const statVal = (label) => { const s = dash.stats.find(x => x.label === label); return s ? s.value : '—'; };
+  const todayDeliveries = (LIVE_DATA.deliveries || []).filter(d => d.scheduled_date === TODAY);
+  const ap = LIVE_DATA.ap || [];
+  const apOpen = ap.filter(i => i.status === 'open' || i.status === 'overdue');
+  const apOverdue = ap.filter(i => i.status === 'overdue');
+  const apOpenTotal = apOpen.reduce((s, i) => s + i.amount, 0);
+  const accountGroups = {};
+  allThreads.forEach(th => {
+    const key = th.account_id || 'unknown';
+    if (!accountGroups[key]) accountGroups[key] = { label: th.account_label || key, count: 0, unread: 0 };
+    accountGroups[key].count++;
+    if (th.unread) accountGroups[key].unread++;
+  });
 
   const html = `
     <div class="greet-strip">
       <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:14px; flex-wrap:wrap;">
         <div>
           <div class="greet-name">${greet}, <em>${CURRENT_USER.name.split(' ')[0]}</em></div>
-          <div class="greet-date">${dateStr}</div>
+          <div class="greet-date">${dateStr} &middot; live data, not a saved report</div>
         </div>
-        <button class="btn" style="background:rgba(255,255,255,0.15); color:white; border:1px solid rgba(255,255,255,0.3);" onclick="openMorningReport()">Download yesterday's report</button>
+        <button class="btn ghost" style="border:1px solid rgba(255,255,255,0.3); color:white;" onclick="refreshLiveData()">Refresh</button>
       </div>
       <div class="stat-row" style="margin-top:14px;">
         <div class="stat-cell">
-          <div class="n">$${YESTERDAY_REPORT.total_sales.toLocaleString()}</div>
-          <div class="l">${t('sales_yest')}</div>
+          <div class="n">${statVal('Sales today')}</div>
+          <div class="l">Sales today</div>
         </div>
         <div class="stat-cell">
-          <div class="n">${YESTERDAY_REPORT.msgs_received}</div>
-          <div class="l">${t('msgs_yest')}</div>
+          <div class="n">${statVal('Messages today')}</div>
+          <div class="l">Messages today</div>
         </div>
         <div class="stat-cell">
           <div class="n">${unreadNow}</div>
           <div class="l">${t('unread_now')}</div>
         </div>
         <div class="stat-cell">
-          <div class="n">${TODAY_DELIVERIES.length}</div>
+          <div class="n">${todayDeliveries.length}</div>
           <div class="l">${t('delivs_today')}</div>
         </div>
       </div>
@@ -1889,82 +1934,40 @@ function renderMorning() {
       <div>
         <div class="card">
           <div class="card-head">
-            <span class="card-title">Messages yesterday by account</span>
-            <span class="card-extra">${ACCOUNT_MSGS_YESTERDAY.reduce((s, a) => s + a.count, 0)} total · ${ACCOUNT_MSGS_YESTERDAY.reduce((s, a) => s + a.unread, 0)} still unread</span>
+            <span class="card-title">Messages by account</span>
+            <span class="card-extra">${allThreads.length} total &middot; ${unreadNow} still unread</span>
           </div>
-          ${ACCOUNT_MSGS_YESTERDAY.map(a => {
-            const acct = ACCOUNTS.find(x => x.id === a.account_id);
-            if (!acct) return '';
-            return `
-              <div class="row" style="cursor:pointer;" onclick="setView('inbox'); setTimeout(() => { INBOX_FILTER.account='${a.account_id}'; renderInbox(); }, 50);">
+          ${Object.keys(accountGroups).length === 0 ? '<div class="empty">No messages yet.</div>' : Object.values(accountGroups).map(a => `
+              <div class="row" style="cursor:pointer;" onclick="setView('inbox');">
                 <div style="flex:1; display:flex; align-items:center; gap:10px;">
-                  <span class="plat ${acct.platform}">${acct.platform.toUpperCase()}</span>
                   <div>
-                    <div class="lbl">${acct.label}</div>
-                    <div class="meta">${a.count} message${a.count === 1 ? '' : 's'} · ${a.serious} serious · ${a.spam} spam${a.unread > 0 ? ` · <b style="color:var(--primary);">${a.unread} still unread</b>` : ''}</div>
+                    <div class="lbl">${a.label}</div>
+                    <div class="meta">${a.count} message${a.count === 1 ? '' : 's'}${a.unread > 0 ? ` &middot; <b style="color:var(--primary);">${a.unread} still unread</b>` : ''}</div>
                   </div>
                 </div>
                 <div class="val">${a.count}</div>
-              </div>`;
-          }).join('')}
+              </div>`).join('')}
         </div>
 
         <div class="card">
           <div class="card-head">
-            <span class="card-title">${t('team_perf')}</span>
-            <span class="card-extra">${YESTERDAY_REPORT.team.filter(x => x.closed > 0).length} ${t('sale_closed_by')}</span>
+            <span class="card-title">Team performance today</span>
           </div>
-          ${YESTERDAY_REPORT.team.filter(t => t.msgs > 0 || t.closed > 0).map(t => {
-            const u = USERS.find(u => u.id === t.id);
-            return `
+          ${(dash.worker_leaderboard || []).length === 0 ? '<div class="empty">No worker activity yet.</div>' : dash.worker_leaderboard.map(w => `
               <div class="row">
                 <div style="flex:1; display:flex; align-items:center; gap:10px;">
-                  <div class="cust-avatar" style="width:28px; height:28px; font-size:12px;">${u.avatar}</div>
                   <div>
-                    <div class="lbl">${u.name}</div>
-                    <div class="meta">${t.msgs} msgs · ${(t.reply_rate*100).toFixed(0)}% reply rate</div>
+                    <div class="lbl">${w.name}</div>
+                    <div class="meta">${w.messages} msgs &middot; ${w.conversion} conversion &middot; ${w.quality_avg} avg quality</div>
                   </div>
                 </div>
-                <div class="val">${t.closed > 0 ? `$${t.gross.toLocaleString()}` : '—'}</div>
-              </div>`;
-          }).join('')}
+              </div>`).join('')}
         </div>
 
-        <div class="card ${YESTERDAY_REPORT.new_reviews_bad > 0 ? 'attn' : ''}">
-          <div class="card-head">
-            <span class="card-title">${t('new_reviews')}</span>
+        <div class="card tight" style="background:var(--surface-soft); border-style:dashed;">
+          <div style="font-family:var(--mono); font-size:10px; color:var(--dim); text-transform:uppercase; letter-spacing:1.5px; text-align:center;">
+            Reviews and stock-alert feeds aren't connected yet
           </div>
-          ${THREADS.filter(th => th.intent === 'review_bad' || th.intent === 'review_good').map(r => `
-            <div class="review">
-              <div class="review-stars ${r.intent === 'review_bad' ? 'low' : ''}">${r.intent === 'review_bad' ? '★ ☆ ☆ ☆ ☆' : '★ ★ ★ ★ ★'}</div>
-              <div class="review-author">${r.customer}</div>
-              <div class="review-body">${r.preview}</div>
-              <div class="review-meta">
-                ${r.account} · ${r.time}
-                ${r.intent === 'review_bad' ? `<br><span class="badge danger">${t('bad_review_action')}</span>` : ''}
-              </div>
-              <button class="btn sm primary" style="margin-top:8px;" onclick="openReviewReply('${r.id}')">${t('review_response_btn')}</button>
-            </div>
-          `).join('')}
-        </div>
-
-        <div class="card">
-          <div class="card-head">
-            <span class="card-title">${t('stock_alerts')}</span>
-            <span class="card-extra">${INVENTORY.filter(i => i.status === 'lowstock').length} ${t('status_lowstock')}</span>
-          </div>
-          ${INVENTORY.filter(i => i.status === 'lowstock').map(i => `
-            <div class="row">
-              <div style="flex:1; display:flex; align-items:center; gap:10px;">
-                <div class="inv-thumb" style="width:36px; height:36px; background:${i.color}; font-size:13px;">${i.sku.slice(0,3)}</div>
-                <div>
-                  <div class="lbl">${i.name}</div>
-                  <div class="meta">${i.sku} · ${t(`showroom_${i.loc.replace('showroom_','').slice(0,1)}`) || t('warehouse')}</div>
-                </div>
-              </div>
-              <div class="val">${i.qty} ${i.qty === 1 ? t('units_left_one') : t('units_left')}</div>
-            </div>
-          `).join('')}
         </div>
       </div>
 
@@ -1972,53 +1975,40 @@ function renderMorning() {
         <div class="card">
           <div class="card-head">
             <span class="card-title">${t('todays_calendar')}</span>
+            <span class="card-extra">${todayDeliveries.length}</span>
           </div>
-          ${TODAY_DELIVERIES.map(d => `
+          ${todayDeliveries.length === 0 ? '<div class="empty">Nothing scheduled today.</div>' : todayDeliveries.map(d => `
             <div class="row">
               <div style="flex:1;">
-                <div class="lbl"><b>${d.time}</b> · ${t('delivery_today')}</div>
-                <div class="meta">${d.customer} — ${d.addr}</div>
-                <div class="meta" style="color:var(--primary);">${d.items}</div>
-              </div>
-            </div>
-          `).join('')}
-          ${TODAY_APPTS.map(a => `
-            <div class="row">
-              <div style="flex:1;">
-                <div class="lbl"><b>${a.time}</b></div>
-                <div class="meta">${a.what}</div>
-                <div class="meta">${t('seen_by')}: ${USERS.find(u => u.id === a.who).name}</div>
+                <div class="lbl"><b>${d.customer_name}</b> &middot; ${d.route_label || ''}</div>
+                <div class="meta">${d.address_area || ''}${d.crew ? ' &middot; ' + d.crew : ''}</div>
+                ${d.notes ? `<div class="meta" style="color:var(--primary);">${d.notes}</div>` : ''}
               </div>
             </div>
           `).join('')}
         </div>
 
-        <div class="card">
-          <div class="card-head">
-            <span class="card-title">${t('ad_spend_yest')}</span>
-            <span class="card-extra">$${YESTERDAY_REPORT.ad_spend.toLocaleString()}</span>
+        <div class="card tight" style="background:var(--surface-soft); border-style:dashed;">
+          <div style="font-family:var(--mono); font-size:10px; color:var(--dim); text-transform:uppercase; letter-spacing:1.5px; text-align:center;">
+            Ad spend by platform isn't connected yet -- see docs/AD-ROI-SETUP.md
           </div>
-          <div class="row"><span class="lbl">Facebook</span><span class="val">$148</span></div>
-          <div class="row"><span class="lbl">Instagram</span><span class="val">$92</span></div>
-          <div class="row"><span class="lbl">Google</span><span class="val">$70</span></div>
-        </div>
-
-        <div class="card">
-          <div class="card-head">
-            <span class="card-title">${t('finance_status')}</span>
-          </div>
-          <div class="row"><span class="lbl">${t('approved')}</span><span class="val" style="color:var(--success);">${YESTERDAY_REPORT.finance_apps.approved}</span></div>
-          <div class="row"><span class="lbl">${t('pending')}</span><span class="val" style="color:var(--warning);">${YESTERDAY_REPORT.finance_apps.pending}</span></div>
-          <div class="row"><span class="lbl">${t('declined')}</span><span class="val" style="color:var(--danger);">${YESTERDAY_REPORT.finance_apps.declined}</span></div>
         </div>
 
         ${userCanSee('money') ? `
-        <div class="card">
+        <div class="card ${apOverdue.length > 0 ? 'attn' : ''}">
           <div class="card-head">
-            <span class="card-title">${t('bank_balance')}</span>
+            <span class="card-title">Bills / accounts payable</span>
+            <span class="card-extra">$${apOpenTotal.toLocaleString()} open</span>
           </div>
-          <div class="row"><span class="lbl">${t('bank_balance')}</span><span class="val">$${BANK.balance.toLocaleString()}</span></div>
-          <div class="row"><span class="lbl">${t('pending_payments')}</span><span class="val" style="color:var(--warning);">$${BANK.pending_payments.toLocaleString()}</span></div>
+          ${apOpen.length === 0 ? '<div class="empty">Nothing open.</div>' : apOpen.map(i => `
+            <div class="row">
+              <div style="flex:1;">
+                <div class="lbl">${i.supplier} &middot; ${i.invoice_no}</div>
+                <div class="meta">Due ${i.due_date}${i.status === 'overdue' ? ' &middot; <b style="color:var(--danger);">overdue</b>' : ''}</div>
+              </div>
+              <div class="val">$${i.amount.toLocaleString()}</div>
+            </div>
+          `).join('')}
         </div>
         ` : ''}
 
@@ -4038,6 +4028,7 @@ function renderReels() {
             <button class="btn ghost sm" style="flex:1;" onclick="publishReelTo('facebook')">${t('reels_publish_fb')}</button>
             <button class="btn ghost sm" style="flex:1;" onclick="publishReelTo('instagram')">${t('reels_publish_ig')}</button>
             <button class="btn ghost sm" style="flex:1;" onclick="publishReelTo('tiktok')">${t('reels_publish_tt')}</button>
+            <button class="btn ghost sm" style="flex:1;" onclick="publishReelTo('youtube')">${t('reels_publish_yt')}</button>
           </div>
           <div id="reels-publish-result" style="font-size:12px; color:var(--dim); margin-top:8px;"></div>
         </div>
@@ -4252,6 +4243,7 @@ const PUBLISH_URLS = {
   facebook: 'https://www.facebook.com/',
   instagram: 'https://www.instagram.com/',
   tiktok: 'https://www.tiktok.com/upload',
+  youtube: 'https://www.youtube.com/upload',
 };
 function publishReelTo(platform) {
   var out = document.getElementById('reels-publish-result');
@@ -4461,7 +4453,7 @@ function saveLiveConfig(apiBase) {
   renderLive();
 }
 let liveAutoLoaded = false;
-let LIVE_DATA = { customers: null, orders: null, deliveries: null, threads: null, error: null, loading: false };
+let LIVE_DATA = { customers: null, orders: null, deliveries: null, threads: null, dashboard: null, ap: null, error: null, loading: false };
 
 // Facebook/Instagram OAuth connect entry point (item 5) -- see
 // worker/src/lib/meta-oauth.ts. One click sends Pasha to Facebooks own
@@ -4497,23 +4489,31 @@ async function liveFetch(path, opts) {
 }
 
 async function refreshLiveData() {
-  LIVE_DATA.loading = true; LIVE_DATA.error = null; renderLive();
+  LIVE_DATA.loading = true; LIVE_DATA.error = null;
+  if (CURRENT_VIEW === 'live') renderLive();
+  if (CURRENT_VIEW === 'morning') renderMorning();
   try {
-    const [customers, orders, deliveries, threads] = await Promise.all([
+    const [customers, orders, deliveries, threads, dashboard, ap] = await Promise.all([
       liveFetch('/api/customers'),
       liveFetch('/api/orders'),
       liveFetch('/api/deliveries'),
       liveFetch('/api/threads'),
+      liveFetch('/api/dashboard/today'),
+      userCanSee('money') ? liveFetch('/api/money/ap') : Promise.resolve({ invoices: [] }),
     ]);
     LIVE_DATA.customers = customers.customers;
     LIVE_DATA.orders = orders.orders;
     LIVE_DATA.deliveries = deliveries.deliveries;
     LIVE_DATA.threads = (threads.threads || []).filter(t => t.surface === 'wa');
+    LIVE_DATA.allThreads = threads.threads || [];
+    LIVE_DATA.dashboard = dashboard;
+    LIVE_DATA.ap = ap.invoices || [];
   } catch (err) {
     LIVE_DATA.error = err.message;
   }
   LIVE_DATA.loading = false;
-  renderLive();
+  if (CURRENT_VIEW === 'live') renderLive();
+  if (CURRENT_VIEW === 'morning') renderMorning();
 }
 
 const NEW_LIVE_ORDER = { customer_id: '', customer_name: '', product_slugs: '', total_amount: '', deposit_amount: '', supplier: 'In stock' };
@@ -4634,6 +4634,52 @@ function renderLive() {
     </div>
   `;
   document.getElementById('view-live').innerHTML = html;
+}
+
+/* ============================================================
+   ALERTS VIEW — real conditions pulled from live AP + financing
+   data, no external accounts needed (see /api/alerts).
+   ============================================================ */
+let ALERTS_STATE = { data: null, loading: false, error: null };
+async function loadAlerts() {
+  ALERTS_STATE.loading = true;
+  ALERTS_STATE.error = null;
+  renderAlerts();
+  try {
+    const res = await api('/api/alerts');
+    ALERTS_STATE.data = res.alerts || [];
+  } catch (e) {
+    ALERTS_STATE.error = e.message || String(e);
+  }
+  ALERTS_STATE.loading = false;
+  renderAlerts();
+}
+function renderAlerts() {
+  if (ALERTS_STATE.data === null && !ALERTS_STATE.loading && !ALERTS_STATE.error) { loadAlerts(); return; }
+  let body;
+  if (ALERTS_STATE.loading && ALERTS_STATE.data === null) {
+    body = '<div class="empty">Loading real alerts...</div>';
+  } else if (ALERTS_STATE.error) {
+    body = '<div class="empty">Could not reach the worker: ' + ALERTS_STATE.error + '</div><button class="btn ghost" onclick="loadAlerts()">Retry</button>';
+  } else if (!ALERTS_STATE.data.length) {
+    body = '<div class="empty">' + t('alerts_empty') + '</div>';
+  } else {
+    body = ALERTS_STATE.data.map(a => `
+      <div class="row">
+        <div style="flex:1;">
+          <div class="lbl">${a.title} <span class="badge ${a.severity === 'high' ? 'danger' : 'warning'}">${a.type}</span></div>
+          <div class="meta">${a.detail}</div>
+        </div>
+      </div>
+    `).join('');
+  }
+  const html = `
+    <h3>${t('nav_alerts')}</h3>
+    <p class="lead">${t('alerts_intro')}</p>
+    <div class="card" style="padding:0;">${body}</div>
+    <button class="btn ghost" style="margin-top:10px;" onclick="loadAlerts()">Refresh</button>
+  `;
+  document.getElementById('view-alerts').innerHTML = html;
 }
 
 /* -------- MODAL HELPERS -------- */
@@ -4840,7 +4886,7 @@ let gatePinTarget = null;
 
 function renderGatePicker() {
   document.getElementById("gate-emp-list").innerHTML = LOGIN_PICKER.map(function(u) {
-    return `<button class="gate-emp-btn" onclick="gatePickEmployee(${JSON.stringify(u.id)})">${u.avatar} -- ${u.name}</button>`;
+    return `<button class="gate-emp-btn" onclick='gatePickEmployee(${JSON.stringify(u.id)})'>${u.avatar} -- ${u.name}</button>`;
   }).join("");
 }
 
@@ -4855,7 +4901,7 @@ function gatePickEmployee(id) {
   document.getElementById("gate-pin-pad").innerHTML = keys.map(function(k) {
     if (k === "") return "<div></div>";
     var label = k === "del" ? "&larr;" : k;
-    return `<button type="button" class="gate-pin-key" onclick="gatePinPress(${JSON.stringify(k)})">${label}</button>`;
+    return `<button type="button" class="gate-pin-key" onclick='gatePinPress(${JSON.stringify(k)})'>${label}</button>`;
   }).join("");
 }
 
