@@ -7,6 +7,13 @@ account_id = "d72bccc4d142f635dfa744038f4a5bc7"
 binding = "KV"
 id = "dbd4bafcb5d54806b030995a537b5ee9"
 
+# Private receipt-photo storage for thread conversion proof (mark-won).
+# No public r2.dev access -- served only via the authenticated
+# /api/threads/:id/receipt route, since these are real customer receipts.
+[[r2_buckets]]
+binding = "RECEIPTS"
+bucket_name = "pasha-receipts"
+
 [assets]
 directory = "docs"
 binding = "ASSETS"

@@ -4603,6 +4603,41 @@ async function refreshLiveData() {
   if (CURRENT_VIEW === 'morning') renderMorning();
 }
 
+// Conversion proof -- opens the device camera directly (capture=environment
+// on an iPad/phone means the OS camera app opens immediately, no gallery
+// step) and uploads the moment a photo is taken, then refreshes so the
+// message-handler leaderboard reflects it. No photo needed at all is also
+// supported (markWonNoPhoto) for a desktop/no-camera fallback.
+function markWonWithReceipt(threadId) {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = 'image/*';
+  input.capture = 'environment';
+  input.onchange = () => {
+    const file = input.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async () => {
+      try {
+        await api('/api/threads/mark-won', { method: 'POST', body: JSON.stringify({ thread_id: threadId, photo_data_url: reader.result }) });
+        await refreshLiveData();
+      } catch (err) {
+        alert('Could not save: ' + err.message);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+  input.click();
+}
+async function markWonNoPhoto(threadId) {
+  try {
+    await api('/api/threads/mark-won', { method: 'POST', body: JSON.stringify({ thread_id: threadId }) });
+    await refreshLiveData();
+  } catch (err) {
+    alert('Could not save: ' + err.message);
+  }
+}
+
 const NEW_LIVE_ORDER = { customer_id: '', customer_name: '', product_slugs: '', total_amount: '', deposit_amount: '', supplier: 'In stock' };
 async function submitLiveOrder() {
   try {
@@ -4674,6 +4709,20 @@ function renderLive() {
         <div class="row">
           <div style="flex:1;"><div class="lbl">${t.customer_name}</div><div class="meta">${t.preview}</div></div>
           <div class="val">${t.unread ? '●' : ''}</div>
+        </div>
+      `).join('')}
+    </div>
+
+    <div class="card">
+      <div class="card-head"><span class="card-title">All messages — mark converted</span><span class="card-extra">${(LIVE_DATA.allThreads || []).length}</span></div>
+      <div style="font-size:12px; color:var(--dim); margin-bottom:10px;">Every real thread across every account. Marking one converted takes a photo of the receipt right from the iPad camera -- that's what feeds the message-handler leaderboard on Morning.</div>
+      ${(LIVE_DATA.allThreads || []).length === 0 ? '<div class="empty">No messages yet.</div>' : (LIVE_DATA.allThreads || []).map(t => `
+        <div class="row">
+          <div style="flex:1;">
+            <div class="lbl">${t.customer_name} <span class="badge ${t.status === 'won' ? 'success' : ''}">${t.status}</span></div>
+            <div class="meta">${t.account_label} · ${t.preview}</div>
+          </div>
+          ${t.status === 'won' ? '' : `<button class="btn sm primary" onclick="markWonWithReceipt('${t.id}')">Upload receipt</button>`}
         </div>
       `).join('')}
     </div>

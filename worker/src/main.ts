@@ -38,6 +38,7 @@ import {
   listApplications,
   listTax,
   listThreads,
+  markThreadWon,
   markThreadSent,
   seedSampleDataIfEmpty,
   upsertMetaThread,
@@ -453,6 +454,43 @@ async function handleRequest(req: Request, env: Env): Promise<Response> {
     return json({ threads });
   }
 
+  // ── conversion proof -- mark a thread won, optionally with a photo of
+  // the receipt (any payment method, not just financing). The photo goes
+  // to the private RECEIPTS R2 bucket, never a public URL, since these
+  // are real customer receipts. Body is JSON with a data-URL image so it
+  // works the same from a plain fetch() as from a multipart form. ───────
+  if (path === "/api/threads/mark-won" && req.method === "POST") {
+    if (!can("thread.mark-won")) return json({ error: "forbidden", missing_atom: "thread.mark-won" }, 403);
+    let body: { thread_id?: string; photo_data_url?: string };
+    try {
+      body = await req.json();
+    } catch {
+      return bad("invalid_json");
+    }
+    if (!body.thread_id) return bad("thread_id required");
+    let photoKey: string | undefined;
+    if (body.photo_data_url) {
+      const match = /^data:(image\/[a-zA-Z+]+);base64,(.+)$/.exec(body.photo_data_url);
+      if (!match) return bad("photo_data_url must be a base64 image data URL");
+      const [, contentType, base64] = match;
+      const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+      const ext = contentType.split("/")[1] || "jpg";
+      photoKey = "receipts/" + body.thread_id + "-" + Date.now() + "." + ext;
+      await (env.RECEIPTS as unknown as { put(key: string, value: Uint8Array, opts?: { httpMetadata?: { contentType?: string } }): Promise<unknown> }).put(photoKey, bytes, { httpMetadata: { contentType } });
+    }
+    const thread = await markThreadWon(body.thread_id, photoKey);
+    if (!thread) return json({ error: "thread_not_found" }, 404);
+    return json({ thread });
+  }
+  if (path === "/api/threads/receipt" && req.method === "GET") {
+    if (!can("thread.mark-won")) return json({ error: "forbidden", missing_atom: "thread.mark-won" }, 403);
+    const key = url.searchParams.get("key") || "";
+    if (!key.startsWith("receipts/")) return bad("invalid key");
+    const obj = await (env.RECEIPTS as unknown as { get(key: string): Promise<{ body: ReadableStream; httpMetadata?: { contentType?: string } } | null> }).get(key);
+    if (!obj) return json({ error: "not_found" }, 404);
+    return new Response(obj.body, { headers: { "Content-Type": obj.httpMetadata?.contentType || "image/jpeg", ...CORS_HEADERS } });
+  }
+
   // ── financing waterfall ──────────────────────────────────────────────
   if (path === "/api/financing/applications" && req.method === "GET") {
     let apps = await listApplications();
@@ -568,12 +606,19 @@ async function handleRequest(req: Request, env: Env): Promise<Response> {
       // Real computation (item 7 fix) -- was previously three hardcoded
       // names/numbers. Built from the same threads + applications KV data
       // every other view already reads, not a separate metrics store.
-      const [threads, apps] = await Promise.all([listThreads(), listApplications()]);
-      const workerRows = SHELL_USERS.filter((u) => !u.is_master).map((u) => {
+      const threads = await listThreads();
+      // Message-handler roster (item 7 fix, round 2, 2026-09-16): Ivan's
+      // explicit ask -- this report tracks whoever actually fields the
+      // incoming messages (Roland, Ilya, Ivan), not the in-store closers.
+      // Conversion is now based on a thread's real "won" status -- set by
+      // /api/threads/mark-won, backed by an uploaded photo of the receipt
+      // -- rather than financing-application status, since a conversion
+      // can happen by any payment method, not just financing.
+      const MESSAGE_HANDLER_IDS = ["u_roland", "u_ilya", "u_ivan"];
+      const workerRows = MESSAGE_HANDLER_IDS.map((id) => SHELL_USERS.find((u) => u.id === id)).filter((u): u is (typeof SHELL_USERS)[number] => !!u).map((u) => {
         const ownThreads = threads.filter((t) => t.worker_id === u.id);
-        const ownApps = apps.filter((a) => a.worker_id === u.id);
-        const wonCount = ownApps.filter((a) => a.status === "approved" || a.status === "funded").length;
-        const conversion = ownApps.length ? Math.round((wonCount / ownApps.length) * 100) : 0;
+        const wonCount = ownThreads.filter((t) => t.status === "won").length;
+        const conversion = ownThreads.length ? Math.round((wonCount / ownThreads.length) * 100) : 0;
         const respondedCount = ownThreads.filter((t) => t.last_message_from === "worker").length;
         const qualityAvg = ownThreads.length ? Number((3.5 + (respondedCount / ownThreads.length) * 1.5).toFixed(1)) : 0;
         return { name: u.name, messages: ownThreads.length, conversion: conversion + "%", quality_avg: qualityAvg };

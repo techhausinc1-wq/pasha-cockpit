@@ -263,7 +263,7 @@ export const SHELL_USERS: User[] = [
   {
     id: "u_paul",
     pin: "1001",
-    name: "Paul (Pasha)",
+    name: "Pavil (Pasha)",
     role: "owner",
     email: "besthomefurnituresa@gmail.com",
     is_master: true,
@@ -313,6 +313,34 @@ export const SHELL_USERS: User[] = [
     role: "showroom-associate",
     is_master: false,
     assigned_accounts: ["mp-acct-3"],
+  },
+  {
+    id: "u_roland",
+    pin: "3003",
+    name: "Roland",
+    role: "showroom-associate",
+    is_master: false,
+    assigned_accounts: [
+      "mp-acct-1",
+      "mp-acct-2",
+      "mp-acct-3",
+      "pg-210-main",
+      "ig-210furnitureoutlet",
+    ],
+  },
+  {
+    id: "u_ilya",
+    pin: "3004",
+    name: "Ilya",
+    role: "showroom-associate",
+    is_master: false,
+    assigned_accounts: [
+      "mp-acct-1",
+      "mp-acct-2",
+      "mp-acct-3",
+      "pg-210-main",
+      "ig-210furnitureoutlet",
+    ],
   },
 ];
 

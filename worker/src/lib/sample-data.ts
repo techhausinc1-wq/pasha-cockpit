@@ -35,6 +35,8 @@ export interface SampleThread {
   last_message_from: "customer" | "worker";
   unread: boolean;
   preview: string;
+  receipt_photo_key?: string;
+  won_at?: string;
   _ord: number;
 }
 
@@ -52,6 +54,21 @@ export function seedThreads(): SampleThread[] {
 
 export async function listThreads(): Promise<SampleThread[]> {
   return kvList<SampleThread>(THREADS_RES);
+}
+
+// Marks a thread converted -- a real, photo-of-the-receipt-backed signal
+// that works for any payment method (cash/card/financed), not just
+// financing-app approvals. The photo itself lives in the private RECEIPTS
+// R2 bucket (see main.ts's /api/threads/:id/mark-won route); this just
+// records the key + timestamp on the thread.
+export async function markThreadWon(id: string, receiptPhotoKey?: string): Promise<SampleThread | null> {
+  const thread = await kvGet<SampleThread>(THREADS_RES, id);
+  if (!thread) return null;
+  thread.status = "won";
+  thread.won_at = new Date().toISOString();
+  if (receiptPhotoKey) thread.receipt_photo_key = receiptPhotoKey;
+  await kvSet(THREADS_RES, id, thread);
+  return thread;
 }
 
 export async function upsertWhatsAppThread(msg: {
