@@ -2295,17 +2295,46 @@ function openInvItem(sku) {
    with the customer, taps SKUs to build a cart, then "Save & checkout"
    routes into the standard invoice flow (cash / card / finance).
    ============================================================ */
+// Real product catalog (602 real items scraped from 210discountfurniture.com,
+// see GET /api/catalog) -- the Order/walkaround and New Invoice flows browse
+// this, not the old INVENTORY demo constant, so a real sale references a
+// real product slug the backend can actually save an order against.
+let REAL_CATALOG = { products: null, loading: false, error: null };
+async function loadCatalog() {
+  REAL_CATALOG.loading = true;
+  REAL_CATALOG.error = null;
+  try {
+    const res = await api('/api/catalog');
+    REAL_CATALOG.products = res.products || [];
+  } catch (e) {
+    REAL_CATALOG.error = e.message || String(e);
+  }
+  REAL_CATALOG.loading = false;
+  if (CURRENT_VIEW === 'order') renderOrder();
+}
+function catalogFind(slug) { return (REAL_CATALOG.products || []).find(p => p.slug === slug); }
+
 let ORDER_CART = { items: [], search: '', cat: 'all' };
 function renderOrder() {
   if (!userCanSee('inventory_read')) {
     document.getElementById('view-order').innerHTML = `<div class="empty">${t('permissions')} — needs <code>inventory_read</code></div>`;
     return;
   }
+  if (REAL_CATALOG.products === null && !REAL_CATALOG.loading && !REAL_CATALOG.error) { loadCatalog(); }
+  if (REAL_CATALOG.loading && REAL_CATALOG.products === null) {
+    document.getElementById('view-order').innerHTML = `<div class="empty">Loading the real catalog...</div>`;
+    return;
+  }
+  if (REAL_CATALOG.error) {
+    document.getElementById('view-order').innerHTML = `<div class="empty">Could not load the catalog: ${REAL_CATALOG.error}</div><button class="btn ghost" onclick="loadCatalog()">Retry</button>`;
+    return;
+  }
+  const catalog = REAL_CATALOG.products || [];
   const q = (ORDER_CART.search || '').toLowerCase();
-  let items = INVENTORY.slice();
+  let items = catalog.map(p => ({ slug: p.slug, sku: p.sku, name: p.name, price: p.price, cat: (p.category_path && p.category_path[0]) || 'other' }));
   if (ORDER_CART.cat !== 'all') items = items.filter(i => i.cat === ORDER_CART.cat);
-  if (q) items = items.filter(i => i.name.toLowerCase().includes(q) || i.sku.toLowerCase().includes(q) || i.cat.toLowerCase().includes(q));
-  const cats = [...new Set(INVENTORY.map(i => i.cat))];
+  if (q) items = items.filter(i => i.name.toLowerCase().includes(q) || (i.sku || '').toLowerCase().includes(q) || i.cat.toLowerCase().includes(q));
+  const cats = [...new Set(catalog.map(p => (p.category_path && p.category_path[0]) || 'other'))].sort();
   const cartTotal = ORDER_CART.items.reduce((s, x) => s + x.price * x.qty, 0);
   const cartCount = ORDER_CART.items.reduce((s, x) => s + x.qty, 0);
 
@@ -2328,22 +2357,15 @@ function renderOrder() {
     </div>
 
     <div style="display:grid; grid-template-columns:repeat(auto-fill, minmax(220px, 1fr)); gap:10px; margin-bottom:90px;">
-      ${items.length === 0 ? `<div class="empty" style="grid-column:1/-1;">No SKUs match.</div>` : items.map(i => {
-        const inCart = ORDER_CART.items.find(x => x.sku === i.sku);
-        const lowStock = i.qty <= 3;
+      ${items.length === 0 ? `<div class="empty" style="grid-column:1/-1;">No products match.</div>` : items.map(i => {
+        const inCart = ORDER_CART.items.find(x => x.slug === i.slug);
         return `
-          <div onclick="orderAddItem('${i.sku}')" style="background:var(--surface); border:0.5px solid ${inCart ? 'var(--primary)' : 'var(--border)'}; ${inCart ? 'box-shadow:0 0 0 2px var(--primary-soft);' : ''} border-radius:10px; padding:10px; cursor:pointer; min-height:120px; display:flex; flex-direction:column; gap:6px; position:relative;">
+          <div onclick="orderAddItem('${i.slug}')" style="background:var(--surface); border:0.5px solid ${inCart ? 'var(--primary)' : 'var(--border)'}; ${inCart ? 'box-shadow:0 0 0 2px var(--primary-soft);' : ''} border-radius:10px; padding:10px; cursor:pointer; min-height:100px; display:flex; flex-direction:column; gap:6px; position:relative;">
             ${inCart ? `<div style="position:absolute; top:6px; right:6px; background:var(--primary); color:white; font-family:var(--label); font-weight:700; font-size:11px; padding:2px 8px; border-radius:10px;">×${inCart.qty}</div>` : ''}
-            <div style="display:flex; gap:8px; align-items:center;">
-              <div style="width:42px; height:42px; border-radius:6px; background:${i.color}; color:white; font-family:var(--serif); font-size:14px; display:flex; align-items:center; justify-content:center; font-weight:600; flex-shrink:0;">${i.sku.slice(0,3)}</div>
-              <div style="flex:1; min-width:0;">
-                <div style="font-family:var(--mono); font-size:10px; color:var(--dim); letter-spacing:0.8px;">${i.sku}</div>
-                <div style="font-family:var(--label); font-weight:700; font-size:11px; color:var(--dim); text-transform:uppercase;">${i.cat}</div>
-              </div>
-            </div>
+            <div style="font-family:var(--label); font-weight:700; font-size:11px; color:var(--dim); text-transform:uppercase;">${i.cat.replace(/-/g, ' ')}</div>
             <div style="font-weight:600; font-size:13px; line-height:1.25; flex:1;">${i.name}</div>
             <div style="display:flex; justify-content:space-between; align-items:flex-end;">
-              <span style="font-family:var(--label); font-weight:700; font-size:11px; color:${lowStock ? 'var(--warning)' : 'var(--success)'}; text-transform:uppercase;">${i.qty} in stock</span>
+              <span style="font-family:var(--mono); font-size:10px; color:var(--dim);">${i.sku || ''}</span>
               <span style="font-family:var(--mono); font-weight:700; font-size:16px;">$${i.price.toLocaleString()}</span>
             </div>
           </div>`;
@@ -2366,11 +2388,12 @@ function renderOrder() {
   document.getElementById('view-order').innerHTML = html;
 }
 
-function orderAddItem(sku) {
-  const it = INVENTORY.find(x => x.sku === sku);
-  const ex = ORDER_CART.items.find(x => x.sku === sku);
+function orderAddItem(slug) {
+  const it = catalogFind(slug);
+  if (!it) return;
+  const ex = ORDER_CART.items.find(x => x.slug === slug);
   if (ex) ex.qty += 1;
-  else ORDER_CART.items.push({ sku: it.sku, name: it.name, price: it.price, qty: 1 });
+  else ORDER_CART.items.push({ slug: it.slug, sku: it.sku, name: it.name, price: it.price, qty: 1 });
   renderOrder();
 }
 
@@ -2418,7 +2441,7 @@ function orderDec(idx) {
 function orderCheckout() {
   if (ORDER_CART.items.length === 0) return;
   // Hand the cart off to the standard new-invoice flow
-  NEW_INV = { items: ORDER_CART.items.slice(), customer: '', phone: '', email: '', method: 'cash', addr: '', search: '' };
+  NEW_INV = { items: ORDER_CART.items.slice(), customer: '', phone: '', email: '', method: 'cash', addr: '', search: '', deposit: null, supplier: 'In stock' };
   ORDER_CART = { items: [], search: '', cat: 'all' };
   renderNewInvoice();
 }
@@ -2533,18 +2556,20 @@ function openCustomerFinanceStandalone() {
   // Invoices view even before a cart has been built. Useful when a customer
   // wants to know "what can I get approved for" before picking items.
   if (!NEW_INV || NEW_INV.items.length === 0) {
-    NEW_INV = { items: [], customer: '', phone: '', email: '', method: 'finance_af', addr: '', search: '' };
+    NEW_INV = { items: [], customer: '', phone: '', email: '', method: 'finance_af', addr: '', search: '', deposit: null, supplier: 'In stock' };
   }
   openFinanceApp('finance_af');
 }
-let NEW_INV = { items: [], customer: '', phone: '', email: '', method: 'cash', addr: '', search: '' };
+let NEW_INV = { items: [], customer: '', phone: '', email: '', method: 'cash', addr: '', search: '', deposit: null, supplier: 'In stock' };
 function openNewInvoice() {
-  NEW_INV = { items: [], customer: '', phone: '', email: '', method: 'cash', addr: '', search: '' };
+  NEW_INV = { items: [], customer: '', phone: '', email: '', method: 'cash', addr: '', search: '', deposit: null, supplier: 'In stock' };
   renderNewInvoice();
 }
 function renderNewInvoice() {
+  if (REAL_CATALOG.products === null && !REAL_CATALOG.loading && !REAL_CATALOG.error) { loadCatalog().then(() => renderNewInvoice()); }
+  const catalog = REAL_CATALOG.products || [];
   const q = (NEW_INV.search || '').toLowerCase();
-  const filtered = INVENTORY.filter(i => !q || i.name.toLowerCase().includes(q) || i.sku.toLowerCase().includes(q) || i.cat.toLowerCase().includes(q)).slice(0, 18);
+  const filtered = (q ? catalog.filter(i => i.name.toLowerCase().includes(q) || (i.sku || '').toLowerCase().includes(q) || (i.category_path || []).join(' ').toLowerCase().includes(q)) : catalog).slice(0, 18);
   const total = NEW_INV.items.reduce((s, x) => s + (x.price * x.qty), 0);
   openModal(`
     <div class="modal-head">
@@ -2569,13 +2594,12 @@ function renderNewInvoice() {
     <div style="display:grid; grid-template-columns:repeat(2,1fr); gap:6px; max-height:240px; overflow-y:auto; padding:4px; background:var(--surface-soft); border-radius:8px; margin-bottom:12px;">
       ${filtered.length === 0 ? `<div style="grid-column:1/-1; padding:20px; text-align:center; color:var(--dim); font-size:13px;">Nada coincide. Borra el buscador.</div>` :
         filtered.map(i => {
-          const alreadyAdded = NEW_INV.items.find(x => x.sku === i.sku);
+          const alreadyAdded = NEW_INV.items.find(x => x.slug === i.slug);
           return `
-            <div onclick="addInvItem('${i.sku}')" style="background:var(--surface); border:0.5px solid ${alreadyAdded ? 'var(--primary)' : 'var(--border)'}; border-radius:8px; padding:8px; cursor:pointer; display:flex; gap:8px; align-items:center; min-height:56px;">
-              <div style="width:36px; height:36px; border-radius:6px; background:${i.color}; color:white; font-family:var(--serif); font-size:12px; display:flex; align-items:center; justify-content:center; font-weight:600; flex-shrink:0;">${i.sku.slice(0,3)}</div>
+            <div onclick="addInvItem('${i.slug}')" style="background:var(--surface); border:0.5px solid ${alreadyAdded ? 'var(--primary)' : 'var(--border)'}; border-radius:8px; padding:8px; cursor:pointer; display:flex; gap:8px; align-items:center; min-height:56px;">
               <div style="flex:1; min-width:0;">
                 <div style="font-weight:600; font-size:12px; line-height:1.2; margin-bottom:2px;">${i.name}</div>
-                <div style="font-size:10px; color:var(--dim); font-family:var(--mono);">${i.sku} · $${i.price}</div>
+                <div style="font-size:10px; color:var(--dim); font-family:var(--mono);">${i.sku || ''} · $${i.price}</div>
               </div>
               ${alreadyAdded ? `<div style="background:var(--primary); color:white; font-size:10px; padding:2px 5px; border-radius:8px; font-weight:700;">${alreadyAdded.qty}</div>` : `<div style="color:var(--dim); font-size:20px; font-weight:300;">+</div>`}
             </div>`;
@@ -2615,20 +2639,32 @@ function renderNewInvoice() {
         <option value="finance_progressive">${t('method_finance_progressive')}</option>
       </select>
     </div>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+      <div class="field"><label class="field-lbl">Deposit today</label><input class="input" type="number" placeholder="$${total.toLocaleString()} (full amount)" value="${NEW_INV.deposit === null ? '' : NEW_INV.deposit}" oninput="NEW_INV.deposit=this.value;"></div>
+      <div class="field"><label class="field-lbl">Fulfillment</label>
+        <select class="select" onchange="NEW_INV.supplier=this.value;">
+          <option value="In stock" ${NEW_INV.supplier === 'In stock' ? 'selected' : ''}>In stock</option>
+          <option value="Crown Mark" ${NEW_INV.supplier === 'Crown Mark' ? 'selected' : ''}>Special order · Crown Mark</option>
+          <option value="Happy Homes" ${NEW_INV.supplier === 'Happy Homes' ? 'selected' : ''}>Special order · Happy Homes</option>
+          <option value="Other" ${NEW_INV.supplier === 'Other' ? 'selected' : ''}>Special order · Other</option>
+        </select>
+      </div>
+    </div>
     <div class="field"><label class="field-lbl">${t('delivery_address')}</label><input class="input" placeholder="Pickup or full address..." value="${NEW_INV.addr}" oninput="NEW_INV.addr=this.value;"></div>
     <div class="field" style="background:var(--surface-soft); padding:12px; border-radius:8px; text-align:center;">
       <div class="field-lbl" style="margin-bottom:8px;">${t('customer_signature')}</div>
       <div style="border:1px dashed var(--border); border-radius:6px; height:80px; background:var(--surface); display:flex; align-items:center; justify-content:center; color:var(--dim); font-style:italic;">${t('sign_here')}</div>
     </div>
 
-    <button class="btn primary full" ${NEW_INV.items.length === 0 ? 'disabled style="opacity:0.5; cursor:not-allowed;"' : ''} onclick="finalizeNewInvoice()">${t('save_invoice')} · $${total.toLocaleString()}</button>
+    <button class="btn primary full" ${NEW_INV.items.length === 0 ? 'disabled style="opacity:0.5; cursor:not-allowed;"' : ''} onclick="finalizeNewInvoice(event)">${t('save_invoice')} · $${total.toLocaleString()}</button>
   `);
 }
-function addInvItem(sku) {
-  const it = INVENTORY.find(x => x.sku === sku);
-  const ex = NEW_INV.items.find(x => x.sku === sku);
+function addInvItem(slug) {
+  const it = catalogFind(slug);
+  if (!it) return;
+  const ex = NEW_INV.items.find(x => x.slug === slug);
   if (ex) ex.qty += 1;
-  else NEW_INV.items.push({ sku: it.sku, name: it.name, price: it.price, qty: 1 });
+  else NEW_INV.items.push({ slug: it.slug, sku: it.sku, name: it.name, price: it.price, qty: 1 });
   renderNewInvoice();
 }
 function incInvItem(idx) { NEW_INV.items[idx].qty += 1; renderNewInvoice(); }
@@ -2637,21 +2673,59 @@ function decInvItem(idx) {
   if (NEW_INV.items[idx].qty <= 0) NEW_INV.items.splice(idx, 1);
   renderNewInvoice();
 }
-function finalizeNewInvoice() {
+// Real backend save -- creates/finds the customer, then a real order
+// (deposit / balance-due ledger, see worker/src/lib/orders.ts). This is
+// what makes a sale actually persist instead of only living in the
+// in-browser INVOICES array. Both the cash/card path (finalizeNewInvoice)
+// and the financed path (completeFinancedSale) call this.
+async function saveRealOrder(items, depositAmount, supplier) {
+  const customerName = NEW_INV.customer || 'Walk-in customer';
+  const custRes = await api('/api/customers', {
+    method: 'POST',
+    body: JSON.stringify({ name: customerName, phone: NEW_INV.phone || undefined, email: NEW_INV.email || undefined }),
+  });
+  const totalAmount = items.reduce((s, x) => s + x.price * x.qty, 0);
+  const productSlugs = items.map(x => x.slug).filter(Boolean);
+  const orderRes = await api('/api/orders', {
+    method: 'POST',
+    body: JSON.stringify({
+      customer_id: custRes.customer.id,
+      customer_name: customerName,
+      product_slugs: productSlugs,
+      total_amount: totalAmount,
+      deposit_amount: depositAmount,
+      supplier: supplier || 'In stock',
+    }),
+  });
+  return orderRes.order;
+}
+
+async function finalizeNewInvoice(ev) {
   if (NEW_INV.items.length === 0) return;
   // If finance method selected, route through the finance application flow first
   if (NEW_INV.method && NEW_INV.method.startsWith('finance_')) {
     openFinanceApp(NEW_INV.method);
     return;
   }
-  // Otherwise, save + show print/sign confirmation
-  const newId = 'INV-2026-' + String(900 + Math.floor(Math.random() * 99)).padStart(4, '0');
   const total = NEW_INV.items.reduce((s,x) => s + x.price * x.qty, 0);
+  const depositAmount = (NEW_INV.deposit !== null && NEW_INV.deposit !== '') ? Number(NEW_INV.deposit) : total;
+  const btn = ev && ev.target;
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
+  let order;
+  try {
+    order = await saveRealOrder(NEW_INV.items, depositAmount, NEW_INV.supplier);
+  } catch (e) {
+    alert('Could not save this sale to the real system: ' + (e.message || e) + '\n\nNothing was recorded -- please try again before handing over a receipt.');
+    if (btn) { btn.disabled = false; btn.textContent = t('save_invoice') + ' · $' + total.toLocaleString(); }
+    return;
+  }
+  // Real order saved -- build the same local shape the existing print/
+  // post-sale flow already expects, keyed to the real order's real id.
   const inv = {
-    id: newId,
+    id: order.id,
     date: TODAY,
     customer: NEW_INV.customer || 'Walk-in customer',
-    cust_id: null,
+    cust_id: order.customer_id,
     total,
     items: NEW_INV.items.slice(),
     method: NEW_INV.method,
@@ -2912,7 +2986,7 @@ function renderFinanceApp() {
           <div style="font-family:var(--mono); font-size:32px; font-weight:700;">$${requested.toLocaleString()}</div>
           <div style="font-size:12px; color:var(--dim); margin-top:6px;">≈ $${monthly}/mo over ${term} months</div>
         </div>
-        <button class="btn primary full" onclick="completeFinancedSale()">Finalize sale · print receipt</button>
+        <button class="btn primary full" onclick="completeFinancedSale(event)">Finalize sale · print receipt</button>
       </div>
     ` : counter ? `
       <div style="text-align:center; padding:20px 0;">
@@ -2924,7 +2998,7 @@ function renderFinanceApp() {
           <div style="font-family:var(--mono); font-size:32px; font-weight:700;">$${lender.cap.toLocaleString()}</div>
           <div style="font-size:12px; color:var(--dim); margin-top:6px;">Short by $${(requested - lender.cap).toLocaleString()} — customer pays the difference in cash or card</div>
         </div>
-        <button class="btn primary full" style="margin-bottom:6px;" onclick="completeFinancedSale()">Accept and finalize sale</button>
+        <button class="btn primary full" style="margin-bottom:6px;" onclick="completeFinancedSale(event)">Accept and finalize sale</button>
         <button class="btn ghost full" onclick="closeModal();">Cancel — remove items</button>
       </div>
     ` : `
@@ -2957,15 +3031,28 @@ function financeAppSubmit() {
   FINANCE_APP.step = 4;
   renderFinanceApp();
 }
-function completeFinancedSale() {
-  // Save the invoice with finance method + approved status
-  const newId = 'INV-2026-' + String(900 + Math.floor(Math.random() * 99)).padStart(4, '0');
+async function completeFinancedSale(ev) {
   const total = NEW_INV.items.reduce((s,x) => s + x.price * x.qty, 0);
+  // How much the lender is actually covering -- full total if approved,
+  // the lender's cap if it was a partial/counter approval (see step 5 of
+  // renderFinanceApp -- same math, recomputed here since that step's
+  // locals aren't persisted on FINANCE_APP).
+  const financedAmount = Math.min(total, FINANCE_APP.lender.cap);
+  const btn = ev && ev.target;
+  if (btn) { btn.disabled = true; btn.textContent = 'Saving...'; }
+  let order;
+  try {
+    order = await saveRealOrder(NEW_INV.items, financedAmount, NEW_INV.supplier);
+  } catch (e) {
+    alert('Could not save this sale to the real system: ' + (e.message || e) + '\n\nNothing was recorded -- please try again before handing over a receipt.');
+    if (btn) { btn.disabled = false; btn.textContent = 'Finalize sale · print receipt'; }
+    return;
+  }
   const inv = {
-    id: newId,
+    id: order.id,
     date: TODAY,
     customer: NEW_INV.customer || 'Walk-in customer',
-    cust_id: null,
+    cust_id: order.customer_id,
     total,
     items: NEW_INV.items.slice(),
     method: NEW_INV.method,
