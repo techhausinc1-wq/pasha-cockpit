@@ -277,7 +277,7 @@ export const SHELL_USERS: User[] = [
   },
   {
     id: "u_ivan",
-    pin: "1002",
+    pin: "2991",
     name: "Ivan (advisor)",
     role: "owner",
     email: "techhausinc1@gmail.com",
