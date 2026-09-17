@@ -58,12 +58,14 @@ import {
 } from "./lib/whatsapp.ts";
 import {
   type Customer,
+  findCustomerById,
   findOrCreateCustomer,
   searchCustomers,
   seedCustomersIfEmpty,
 } from "./lib/customers.ts";
 import {
   createOrder,
+  findOrderById,
   listOrders,
   ordersForCustomer,
   recordBalancePayment,
@@ -223,6 +225,46 @@ async function runDailyDigest(): Promise<void> {
     if (!u.is_master || !u.email) continue;
     const result = await sendDailyDigestEmail(u.email);
     console.log("Daily digest to " + u.email + ": " + (result.ok ? "sent" : "failed -- " + result.error));
+  }
+}
+
+// Automated delivery-status WhatsApp notifications. Real gap found via
+// furniture-retail-tech research 2026-09-17 (STORIS et al.): every retailer
+// notification guide flags this as the highest-leverage automated touchpoint
+// ("manual communication depends on someone remembering... automated
+// notifications happen every time, without fail") -- every piece of
+// infrastructure already existed (sendWhatsAppText, order->customer linkage)
+// but nothing actually fired a message on a delivery status change; staff
+// had to remember to message customers by hand. Deliberately scoped to
+// delivery status only, NOT financing decisions -- an auto-sent financing
+// approval/decline message risks real consumer-lending compliance exposure
+// (adverse-action notice requirements) that shouldn't be built casually;
+// flagged as a recommendation instead, not built.
+// Fails soft everywhere: a missing customer/phone/WhatsApp-send error never
+// blocks the actual delivery scheduling/status-update operation itself.
+async function notifyCustomerOfDelivery(
+  delivery: { order_id: string; scheduled_date: string; route_label: string; crew: string | null } | null,
+  kind: "scheduled" | "en-route" | "delivered",
+): Promise<boolean> {
+  if (!delivery) return false;
+  try {
+    const order = await findOrderById(delivery.order_id);
+    if (!order) return false;
+    const customer = await findCustomerById(order.customer_id);
+    const to = customer?.whatsapp_id || customer?.phone;
+    if (!customer || !to) return false;
+    const firstName = customer.name.split(" ")[0];
+    const text = kind === "scheduled"
+      ? `Hi ${firstName}, this is 210 Discount Furniture. Your delivery is scheduled for ${delivery.scheduled_date} (${delivery.route_label}). We'll text you again when the crew is on the way.`
+      : kind === "en-route"
+      ? `Hi ${firstName}, your delivery is on the way now${delivery.crew ? ` with ${delivery.crew}` : ""}! See you soon.`
+      : `Hi ${firstName}, your delivery is complete -- thank you for choosing 210 Discount Furniture! Reply here anytime if anything needs attention.`;
+    const result = await sendWhatsAppText(to, text);
+    if (result.ok) await markThreadSent(to, text);
+    return result.ok;
+  } catch (e) {
+    console.log("notifyCustomerOfDelivery failed (non-fatal): " + (e instanceof Error ? e.message : String(e)));
+    return false;
   }
 }
 
@@ -796,7 +838,8 @@ async function handleRequest(req: Request, env: Env): Promise<Response> {
       return json({ error: "missing_fields", required: ["order_id", "customer_name", "address_area", "scheduled_date", "route_label"] }, 400);
     }
     const delivery = await scheduleDelivery({ order_id: body.order_id, customer_name: body.customer_name, address_area: body.address_area, scheduled_date: body.scheduled_date, route_label: body.route_label, crew: body.crew, notes: body.notes });
-    return json({ delivery });
+    const notified = await notifyCustomerOfDelivery(delivery, "scheduled");
+    return json({ delivery, customer_notified: notified });
   }
   if (path === "/api/deliveries/status" && req.method === "POST") {
     if (!can("deliveries.write.status")) return json({ error: "forbidden", missing_atom: "deliveries.write.status" }, 403);
@@ -809,7 +852,12 @@ async function handleRequest(req: Request, env: Env): Promise<Response> {
     if (!body.id || !body.status) return json({ error: "id_and_status_required" }, 400);
     const delivery = await updateDeliveryStatus(body.id, body.status);
     if (!delivery) return json({ error: "delivery_not_found" }, 404);
-    return json({ delivery });
+    // "failed" is deliberately not auto-notified -- that needs a human
+    // apology/explanation, not a template message.
+    const notified = delivery.status === "en-route" || delivery.status === "delivered"
+      ? await notifyCustomerOfDelivery(delivery, delivery.status)
+      : false;
+    return json({ delivery, customer_notified: notified });
   }
 
   // ── WhatsApp broadcast ───────────────────────────────────────────────
