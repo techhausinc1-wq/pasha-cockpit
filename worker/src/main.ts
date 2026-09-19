@@ -1105,7 +1105,19 @@ async function handleRequest(req: Request, env: Env): Promise<Response> {
 
 export default {
   async fetch(req: Request, env: Env): Promise<Response> {
-    return handleRequest(req, env);
+    try {
+      return await handleRequest(req, env);
+    } catch (err) {
+      // Without this, any unhandled throw anywhere in handleRequest's ~1000
+      // lines of route dispatch crashes the whole Worker with a raw
+      // "FetchEvent.respondWith received an error: Returned response is
+      // null" -- e.g. the real Reel-generation failure Pasha hit live in
+      // front of a client. Converting to a real 500 means every future bug
+      // in any route surfaces as a normal API error instead of taking the
+      // entire cockpit down.
+      console.error("Unhandled error in handleRequest:", err);
+      return json({ error: "internal_error", detail: err instanceof Error ? err.message : String(err) }, 500);
+    }
   },
   // Cloudflare Cron Trigger -- see wrangler.toml [triggers] crons. Same
   // "0 21 * * *" (9pm UTC) schedule the old Deno.cron call used.
