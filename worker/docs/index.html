@@ -863,6 +863,7 @@ h3 {
   <section class="view" id="view-ads"></section>
   <section class="view" id="view-scout"></section>
   <section class="view" id="view-reels"></section>
+  <section class="view" id="view-suppliers"></section>
   <section class="view" id="view-team"></section>
   <section class="view" id="view-live"></section>
   <section class="view" id="view-alerts"></section>
@@ -906,6 +907,7 @@ const I18N = {
     alerts_empty: 'Sin alertas activas en este momento.',
     nav_reels: 'Videos',
     nav_scout: 'Scout',
+    nav_suppliers: 'Proveedores',
     nav_order: 'Pedido rápido',
     scout_title: 'Scout · próximo canal de publicidad',
     scout_intro: 'Oportunidades de publicidad investigadas con contacto, decisor, tamaño de audiencia y guion de acercamiento. Toca cualquier tarjeta para enviar el primer mensaje en 60 segundos.',
@@ -1135,6 +1137,7 @@ const I18N = {
     alerts_empty: 'No active alerts right now.',
     nav_reels: 'Videos',
     nav_scout: 'Scout',
+    nav_suppliers: 'Suppliers',
     nav_order: 'Easy order',
     scout_title: 'Scout · find the next advertising channel',
     scout_intro: 'Pre-researched advertising opportunities with contact, decision-maker, audience size, and outreach script. Tap any card to send the first message in 60 seconds.',
@@ -1358,6 +1361,7 @@ const I18N = {
     nav_customers: 'Клиенты',
     nav_ads: 'Реклама',
     nav_reels: 'Видео',
+    nav_suppliers: 'Поставщики',
     nav_team: 'Команда',
     nav_live: 'Операции',
     nav_alerts: 'Оповещения',
@@ -1829,6 +1833,7 @@ function renderNav() {
     ['ads', 'nav_ads'],
     ['scout', 'nav_scout'],
     ['reels', 'nav_reels'],
+    ['suppliers', 'nav_suppliers'],
     ['team', 'nav_team'],
     ['live', 'nav_live'],
     ['alerts', 'nav_alerts']
@@ -1858,6 +1863,7 @@ function renderView() {
   if (CURRENT_VIEW === 'ads') renderAds();
   if (CURRENT_VIEW === 'scout') renderScout();
   if (CURRENT_VIEW === 'reels') renderReels();
+  if (CURRENT_VIEW === 'suppliers') renderSuppliers();
   if (CURRENT_VIEW === 'team') renderTeam();
   if (CURRENT_VIEW === 'live') renderLive();
   if (CURRENT_VIEW === 'alerts') renderAlerts();
@@ -4046,6 +4052,195 @@ function scoutGmail(id) {
   try { navigator.clipboard.writeText('To: ' + opp.contact.email + '\nSubject: ' + subject + '\n\n' + finalBody); } catch (e) {}
   window.open(url, '_blank', 'noopener');
   closeModal();
+}
+
+/* ============================================================
+   SUPPLIERS VIEW — monthly color/finish check tracker
+   Real ask, Ivan 2026-09-19: once a month Pasha calls suppliers to check
+   for new colors on a sectional/bed/table line. Track what's known, what's
+   new, what needs photos or an order decision, draft the outreach email.
+   ============================================================ */
+let SUPPLIER_PRODUCTS = null;
+let SUPPLIER_LOADING = false;
+
+async function loadSupplierProducts(force) {
+  if (SUPPLIER_LOADING) return;
+  if (SUPPLIER_PRODUCTS !== null && !force) return;
+  SUPPLIER_LOADING = true;
+  if (CURRENT_VIEW === 'suppliers') renderSuppliers();
+  try {
+    const data = await api('/api/supplier-products');
+    SUPPLIER_PRODUCTS = data.products || [];
+  } catch (err) {
+    SUPPLIER_PRODUCTS = [];
+    console.error('supplier-products load failed', err);
+  }
+  SUPPLIER_LOADING = false;
+  if (CURRENT_VIEW === 'suppliers') renderSuppliers();
+}
+
+function statusBadge(status) {
+  if (status === 'needs-photos') return '<span class="badge warning">Needs photos</span>';
+  if (status === 'needs-order-decision') return '<span class="badge warning">Needs order decision</span>';
+  if (status === 'resolved') return '<span class="badge">Resolved</span>';
+  return '';
+}
+
+function daysSince(iso) {
+  if (!iso) return null;
+  return Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
+}
+
+function renderSuppliers() {
+  if (!userCanSee('inventory_read')) {
+    document.getElementById('view-suppliers').innerHTML = `<div class="empty">${t('permissions')} — needs <code>inventory_read</code></div>`;
+    return;
+  }
+  if (SUPPLIER_PRODUCTS === null && !SUPPLIER_LOADING) { loadSupplierProducts(); }
+  if (SUPPLIER_LOADING || SUPPLIER_PRODUCTS === null) {
+    document.getElementById('view-suppliers').innerHTML = `<h3>Suppliers &middot; Colors &amp; Finishes</h3><div class="card"><div class="empty">Loading...</div></div>`;
+    return;
+  }
+  const products = SUPPLIER_PRODUCTS;
+  const openReports = [];
+  products.forEach(p => p.reports.forEach(r => { if (r.status !== 'resolved') openReports.push({ p, r }); }));
+  const overdue = products.filter(p => { const d = daysSince(p.last_checked_at); return d === null || d >= 30; });
+
+  const html = `
+    <h3>Suppliers &middot; Colors &amp; Finishes</h3>
+    <p class="lead">Once-a-month color/finish check-ins, per supplier and product line — so nothing a supplier mentions on a call gets lost before it's photographed or ordered.</p>
+
+    <div style="display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap;">
+      ${userCanSee('inventory_write') ? `<button class="btn primary" onclick="openNewSupplierProduct()">+ Add supplier / product line</button>` : ''}
+    </div>
+
+    ${openReports.length ? `
+    <div class="card" style="border-color:var(--warning); margin-bottom:14px;">
+      <div class="card-head"><span class="card-title">Needs attention (${openReports.length})</span></div>
+      ${openReports.map(({p, r}) => `
+        <div class="row" style="align-items:flex-start;">
+          <div>
+            <b>${r.color}</b> — ${p.supplier} · ${p.product_type}<br>
+            <span style="color:var(--dim); font-size:12px;">Reported by ${r.reported_by}, ${daysSince(r.reported_at)}d ago${r.notes ? ' — ' + r.notes : ''}</span>
+          </div>
+          <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
+            ${statusBadge(r.status)}
+            ${p.supplier_email ? `<button class="btn ghost" onclick="emailSupplierForPhotos('${p.id}','${r.id}')">Draft photo request</button>` : ''}
+            <select onchange="setReportStatus('${p.id}','${r.id}', this.value)">
+              <option value="">Update status...</option>
+              <option value="needs-photos" ${r.status === 'needs-photos' ? 'selected' : ''}>Needs photos</option>
+              <option value="needs-order-decision" ${r.status === 'needs-order-decision' ? 'selected' : ''}>Needs order decision</option>
+              <option value="resolved">Mark resolved</option>
+            </select>
+          </div>
+        </div>
+      `).join('')}
+    </div>` : ''}
+
+    ${overdue.length ? `
+    <div class="card tight" style="background:var(--surface-soft); border-style:dashed; margin-bottom:14px; font-size:12px;">
+      <b>Due for a check-in call (30+ days, or never checked):</b><br>
+      ${overdue.map(p => `${p.supplier} — ${p.product_type}${p.last_checked_at ? ' (last checked ' + daysSince(p.last_checked_at) + 'd ago)' : ' (never checked)'}`).join('<br>')}
+    </div>` : ''}
+
+    <div class="card" style="padding:0;">
+      ${products.length === 0 ? `<div class="empty" style="padding:20px;">No supplier/product lines yet. Add one to start tracking.</div>` : products.map(p => `
+        <div class="cust-row" style="cursor:default; flex-direction:column; align-items:stretch;">
+          <div style="display:flex; justify-content:space-between; align-items:center; width:100%;">
+            <div>
+              <div class="cust-name">${p.supplier} — ${p.product_type}</div>
+              <div class="cust-meta">
+                Known colors: ${p.known_colors.length ? p.known_colors.join(', ') : '<span style="color:var(--dim);">none logged yet</span>'}
+                &middot; Last checked: ${p.last_checked_at ? daysSince(p.last_checked_at) + 'd ago by ' + p.last_checked_by : '<span style="color:var(--warning);">never</span>'}
+              </div>
+            </div>
+            <div style="display:flex; gap:6px; flex-shrink:0;">
+              <button class="btn ghost" onclick="logSupplierCheck('${p.id}')">Log check (nothing new)</button>
+              <button class="btn primary" onclick="openReportNewColor('${p.id}')">+ New color</button>
+            </div>
+          </div>
+        </div>
+      `).join('')}
+    </div>
+  `;
+  document.getElementById('view-suppliers').innerHTML = html;
+}
+
+function openNewSupplierProduct() {
+  openModal(`
+    <div class="modal-head"><div style="font-weight:700; font-size:17px;">Add supplier / product line</div><button class="modal-close" onclick="closeModal()">&times;</button></div>
+    <div class="field"><label class="field-lbl">Supplier name</label><input class="input" id="sp-supplier" placeholder="e.g. Crown Mark"></div>
+    <div class="field"><label class="field-lbl">Supplier email (optional — needed to draft photo requests)</label><input class="input" id="sp-email" placeholder="orders@supplier.com"></div>
+    <div class="field"><label class="field-lbl">Product type</label><input class="input" id="sp-type" placeholder="e.g. Sectional, Bed, Table"></div>
+    <div class="field"><label class="field-lbl">Known colors/finishes (comma separated, optional)</label><input class="input" id="sp-colors" placeholder="e.g. Charcoal, Gray, Cognac"></div>
+    <button class="btn primary full" onclick="submitNewSupplierProduct()">Add</button>
+  `);
+}
+
+async function submitNewSupplierProduct() {
+  const supplier = document.getElementById('sp-supplier').value.trim();
+  const supplier_email = document.getElementById('sp-email').value.trim();
+  const product_type = document.getElementById('sp-type').value.trim();
+  const colorsRaw = document.getElementById('sp-colors').value.trim();
+  if (!supplier || !product_type) { alert('Supplier name and product type are required.'); return; }
+  const known_colors = colorsRaw ? colorsRaw.split(',').map(s => s.trim()).filter(Boolean) : [];
+  try {
+    await api('/api/supplier-products', { method: 'POST', body: JSON.stringify({ supplier, supplier_email: supplier_email || undefined, product_type, known_colors }) });
+    closeModal();
+    await loadSupplierProducts(true);
+  } catch (err) { alert('Could not add: ' + err.message); }
+}
+
+async function logSupplierCheck(id) {
+  try {
+    await api('/api/supplier-products/' + id + '/check', { method: 'POST' });
+    await loadSupplierProducts(true);
+  } catch (err) { alert('Could not log check: ' + err.message); }
+}
+
+function openReportNewColor(id) {
+  openModal(`
+    <div class="modal-head"><div style="font-weight:700; font-size:17px;">Report a new color</div><button class="modal-close" onclick="closeModal()">&times;</button></div>
+    <div class="field"><label class="field-lbl">Color / finish name</label><input class="input" id="cr-color" placeholder="e.g. Brown, Espresso"></div>
+    <div class="field"><label class="field-lbl">Notes (optional)</label><input class="input" id="cr-notes" placeholder="e.g. mentioned on the monthly call, ships in 2 weeks"></div>
+    <button class="btn primary full" onclick="submitNewColorReport('${id}')">Report</button>
+  `);
+}
+
+async function submitNewColorReport(id) {
+  const color = document.getElementById('cr-color').value.trim();
+  const notes = document.getElementById('cr-notes').value.trim();
+  if (!color) { alert('Color name is required.'); return; }
+  try {
+    await api('/api/supplier-products/' + id + '/report-color', { method: 'POST', body: JSON.stringify({ color, notes: notes || undefined }) });
+    closeModal();
+    await loadSupplierProducts(true);
+  } catch (err) { alert('Could not report color: ' + err.message); }
+}
+
+async function setReportStatus(productId, reportId, status) {
+  if (!status) return;
+  try {
+    await api('/api/supplier-products/' + productId + '/reports/' + reportId, { method: 'PATCH', body: JSON.stringify({ status }) });
+    await loadSupplierProducts(true);
+  } catch (err) { alert('Could not update status: ' + err.message); }
+}
+
+// Same real Gmail-web-compose pattern used by Scout outreach above --
+// never a mailto: link.
+function emailSupplierForPhotos(productId, reportId) {
+  const p = SUPPLIER_PRODUCTS.find(x => x.id === productId);
+  if (!p || !p.supplier_email) return;
+  const r = p.reports.find(x => x.id === reportId);
+  if (!r) return;
+  const subject = 'Photos needed — new ' + r.color + ' ' + p.product_type;
+  const body = 'Hi,\n\nCan you send us photos of the new ' + r.color + ' ' + p.product_type + ' you mentioned? We\'d like to get it listed and photographed for our floor/website.\n\nThanks,\n210 Discount Furniture';
+  const url = 'https://mail.google.com/mail/?view=cm&fs=1'
+    + '&to=' + encodeURIComponent(p.supplier_email)
+    + '&su=' + encodeURIComponent(subject)
+    + '&body=' + encodeURIComponent(body);
+  try { navigator.clipboard.writeText('To: ' + p.supplier_email + '\nSubject: ' + subject + '\n\n' + body); } catch (e) {}
+  window.open(url, '_blank', 'noopener');
 }
 
 /* ============================================================

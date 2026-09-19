@@ -64,6 +64,16 @@ import {
   seedCustomersIfEmpty,
 } from "./lib/customers.ts";
 import {
+  listSupplierProducts,
+  createSupplierProduct,
+  deleteSupplierProduct,
+  logCheck,
+  addColorReport,
+  updateColorReportStatus,
+  supplierProductsNeedingAttention,
+  seedSupplierProductsIfEmpty,
+} from "./lib/supplier-colors.ts";
+import {
   createOrder,
   findOrderById,
   listOrders,
@@ -206,6 +216,7 @@ async function ensureSeeded(): Promise<void> {
   await seedCustomersIfEmpty();
   await seedOrdersIfEmpty();
   await seedDeliveriesIfEmpty();
+  await seedSupplierProductsIfEmpty();
   seededThisIsolate = true;
 }
 
@@ -777,6 +788,77 @@ async function handleRequest(req: Request, env: Env): Promise<Response> {
     if (!body.name) return json({ error: "name_required" }, 400);
     const customer = await findOrCreateCustomer({ name: body.name, phone: body.phone ?? undefined, whatsapp_id: body.whatsapp_id ?? undefined, email: body.email ?? undefined });
     return json({ customer });
+  }
+
+  // ── supplier colors/finishes (monthly-call tracker) ─────────────────────
+  if (path === "/api/supplier-products" && req.method === "GET") {
+    if (!can("catalog.read")) return json({ error: "forbidden", missing_atom: "catalog.read" }, 403);
+    return json({ products: await listSupplierProducts() });
+  }
+  if (path === "/api/supplier-products" && req.method === "POST") {
+    if (!can("catalog.write.basic")) return json({ error: "forbidden", missing_atom: "catalog.write.basic" }, 403);
+    let body: { supplier?: string; supplier_email?: string; product_type?: string; known_colors?: string[] };
+    try {
+      body = await req.json();
+    } catch {
+      return json({ error: "invalid_json" }, 400);
+    }
+    if (!body.supplier || !body.product_type) return json({ error: "supplier_and_product_type_required" }, 400);
+    const product = await createSupplierProduct({
+      supplier: body.supplier,
+      supplier_email: body.supplier_email,
+      product_type: body.product_type,
+      known_colors: body.known_colors,
+    });
+    return json({ product });
+  }
+  if (path === "/api/supplier-products/needs-attention" && req.method === "GET") {
+    if (!can("catalog.read")) return json({ error: "forbidden", missing_atom: "catalog.read" }, 403);
+    return json(await supplierProductsNeedingAttention());
+  }
+  if (path.startsWith("/api/supplier-products/") && path.endsWith("/check") && req.method === "POST") {
+    if (!can("catalog.write.basic")) return json({ error: "forbidden", missing_atom: "catalog.write.basic" }, 403);
+    const id = path.split("/")[3];
+    const product = await logCheck(id, user.name);
+    if (!product) return json({ error: "not_found" }, 404);
+    return json({ product });
+  }
+  if (path.startsWith("/api/supplier-products/") && path.endsWith("/report-color") && req.method === "POST") {
+    if (!can("catalog.write.basic")) return json({ error: "forbidden", missing_atom: "catalog.write.basic" }, 403);
+    const id = path.split("/")[3];
+    let body: { color?: string; status?: "needs-photos" | "needs-order-decision" | "resolved"; notes?: string };
+    try {
+      body = await req.json();
+    } catch {
+      return json({ error: "invalid_json" }, 400);
+    }
+    if (!body.color) return json({ error: "color_required" }, 400);
+    const product = await addColorReport(id, { color: body.color, reported_by: user.name, status: body.status, notes: body.notes });
+    if (!product) return json({ error: "not_found" }, 404);
+    return json({ product });
+  }
+  if (path.startsWith("/api/supplier-products/") && path.includes("/reports/") && req.method === "PATCH") {
+    if (!can("catalog.write.basic")) return json({ error: "forbidden", missing_atom: "catalog.write.basic" }, 403);
+    const parts = path.split("/"); // ["", "api", "supplier-products", ":id", "reports", ":reportId"]
+    const id = parts[3];
+    const reportId = parts[5];
+    let body: { status?: "needs-photos" | "needs-order-decision" | "resolved" };
+    try {
+      body = await req.json();
+    } catch {
+      return json({ error: "invalid_json" }, 400);
+    }
+    if (!body.status) return json({ error: "status_required" }, 400);
+    const product = await updateColorReportStatus(id, reportId, body.status);
+    if (!product) return json({ error: "not_found" }, 404);
+    return json({ product });
+  }
+  if (path.startsWith("/api/supplier-products/") && req.method === "DELETE") {
+    if (!can("catalog.write.basic")) return json({ error: "forbidden", missing_atom: "catalog.write.basic" }, 403);
+    const id = path.split("/")[3];
+    const ok = await deleteSupplierProduct(id);
+    if (!ok) return json({ error: "not_found" }, 404);
+    return json({ success: true });
   }
 
   // ── orders (deposit / balance-due ledger) ───────────────────────────
