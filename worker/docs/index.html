@@ -4289,11 +4289,13 @@ function renderReels() {
 
         <div class="card">
           <h2 style="margin-top:0;">${t('reels_step_theme')}</h2>
-          <div style="display:flex; gap:6px; flex-wrap:wrap;">
+          <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px;">
             ${REEL_THEMES.map(th => `
               <button class="pill-filter ${REEL_STATE.theme === th ? 'on' : ''}" onclick="REEL_STATE.theme='${th}'; renderReels();">${t('theme_' + th)}</button>
             `).join('')}
           </div>
+          <label style="font-size:11px; color:var(--dim); display:block; margin-bottom:4px;">Or write your own (e.g. "Halloween", "New Year")</label>
+          <input class="input" type="text" placeholder="Type any promo theme..." value="${REEL_THEMES.includes(REEL_STATE.theme) ? '' : String(REEL_STATE.theme || '').replace(/"/g, '&quot;')}" oninput="REEL_STATE.theme=this.value;" onblur="renderReels();">
         </div>
 
         <div class="card">
