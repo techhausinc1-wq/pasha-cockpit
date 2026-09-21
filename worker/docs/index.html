@@ -939,7 +939,7 @@ const I18N = {
     reels_step_theme: 'Paso 2 · Tema de la promoción',
     reels_step_script: 'Paso 3 · Texto principal',
     reels_step_generate: 'Paso 4 · Generar y publicar',
-    reels_upload_hint: 'Arrastra hasta 8 fotos del set, o usa la cámara del teléfono',
+    reels_upload_hint: 'Toca para elegir una foto del set, o usa la cámara del teléfono',
     reels_generate: 'Generar reel',
     reels_publish_fb: 'Publicar en Facebook',
     reels_publish_ig: 'Publicar en Instagram',
@@ -1169,7 +1169,7 @@ const I18N = {
     reels_step_theme: 'Step 2 · Promo theme',
     reels_step_script: 'Step 3 · Main copy',
     reels_step_generate: 'Step 4 · Generate &amp; publish',
-    reels_upload_hint: 'Drag up to 8 photos of the set, or use the phone camera',
+    reels_upload_hint: 'Tap to choose one photo of the set, or use the phone camera',
     reels_generate: 'Generate reel',
     reels_publish_fb: 'Publish to Facebook',
     reels_publish_ig: 'Publish to Instagram',
@@ -1542,7 +1542,7 @@ const I18N = {
     reels_step_theme: 'Шаг 2 · Тема промо',
     reels_step_script: 'Шаг 3 · Основной текст',
     reels_step_generate: 'Шаг 4 · Сгенерировать и опубликовать',
-    reels_upload_hint: 'Перетащи до 8 фото, или используй камеру телефона',
+    reels_upload_hint: 'Нажми, чтобы выбрать одно фото, или используй камеру телефона',
     reels_generate: 'Сгенерировать ролик',
     reels_publish_fb: 'Опубликовать в Facebook',
     reels_publish_ig: 'Опубликовать в Instagram',
@@ -4266,6 +4266,24 @@ function handleReelPhotoUpload(event) {
   reader.readAsDataURL(file);
 }
 function renderReels() {
+  // Real bug fixed 2026-09-21, reported live in front of the client:
+  // "each click closes the text prompt." renderReels() does a full
+  // destructive innerHTML rebuild of the whole panel, and it's called
+  // from several OTHER fields' own handlers (a theme pill's onclick, the
+  // custom-theme input's onblur, a photo finishing upload) -- not just
+  // from editing the script itself. Whichever of those fired second while
+  // someone was still typing the script would blow away the in-progress
+  // textarea and rebuild it from REEL_STATE.script, which was often still
+  // empty (the onchange/input listener hadn't caught up yet), so the
+  // rebuild silently reverted to the fallback sample script and dropped
+  // focus to <body>. Capturing the live DOM value here, right before the
+  // rebuild, and restoring focus+cursor afterward if it was focused,
+  // means ANY re-render (regardless of what triggered it) preserves
+  // whatever's currently being typed instead of discarding it.
+  const existingScriptEl = document.getElementById('reel-script');
+  if (existingScriptEl) REEL_STATE.script = existingScriptEl.value;
+  const scriptWasFocused = existingScriptEl && document.activeElement === existingScriptEl;
+  const scriptCursor = scriptWasFocused ? existingScriptEl.selectionStart : null;
   const html = `
     <h3>${t('reels')}</h3>
     <p class="lead">${t('reels_intro')}</p>
@@ -4295,7 +4313,15 @@ function renderReels() {
             `).join('')}
           </div>
           <label style="font-size:11px; color:var(--dim); display:block; margin-bottom:4px;">Or write your own (e.g. "Halloween", "New Year")</label>
-          <input class="input" type="text" placeholder="Type any promo theme..." value="${REEL_THEMES.includes(REEL_STATE.theme) ? '' : String(REEL_STATE.theme || '').replace(/"/g, '&quot;')}" oninput="REEL_STATE.theme=this.value;" onblur="renderReels();">
+          <!-- No onblur re-render here on purpose (real bug fixed 2026-09-21): tapping
+               straight from this field into the script textarea below fires this field's
+               blur in the same tick as the tap resolves. A synchronous renderReels() there
+               raced the browser's own focus-transfer and won, so the freshly-rebuilt script
+               textarea never actually received the tap's focus -- "each click closes the
+               text prompt." REEL_STATE.theme already stays live via oninput above with no
+               render needed, so dropping this onblur costs only a cosmetic one-render lag
+               on the preview badge, not any real data. -->
+          <input class="input" type="text" placeholder="Type any promo theme..." value="${REEL_THEMES.includes(REEL_STATE.theme) ? '' : String(REEL_STATE.theme || '').replace(/"/g, '&quot;')}" oninput="REEL_STATE.theme=this.value;">
         </div>
 
         <div class="card">
@@ -4391,7 +4417,13 @@ function renderReels() {
   `;
   document.getElementById('view-reels').innerHTML = html;
   const ta = document.getElementById('reel-script');
-  if (ta) ta.addEventListener('input', e => REEL_STATE.script = e.target.value);
+  if (ta) {
+    ta.addEventListener('input', e => REEL_STATE.script = e.target.value);
+    if (scriptWasFocused) {
+      ta.focus();
+      ta.setSelectionRange(scriptCursor, scriptCursor);
+    }
+  }
 }
 function openReelDetail(id) {
   const r = RECENT_REELS.find(x => x.id === id);
