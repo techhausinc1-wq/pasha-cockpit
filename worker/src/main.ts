@@ -115,6 +115,7 @@ import {
 } from "./lib/tiktok-oauth.ts";
 import { buildDailyDigestData, resendConfigured, sendDailyDigestEmail } from "./lib/digest.ts";
 import { getEnv, setEnv } from "./lib/env.ts";
+import { scanReceiptPhoto } from "./lib/receipt-scan.ts";
 import { setKvNamespace, type KvNamespaceLike } from "./lib/kv.ts";
 
 // Cloudflare Workers port: static files (formerly worker/docs/,
@@ -882,8 +883,12 @@ async function handleRequest(req: Request, env: Env): Promise<Response> {
     } catch {
       return json({ error: "invalid_json" }, 400);
     }
-    if (!body.customer_id || !body.customer_name || !body.product_slugs?.length || body.total_amount == null || body.deposit_amount == null || !body.supplier) {
-      return json({ error: "missing_fields", required: ["customer_id", "customer_name", "product_slugs", "total_amount", "deposit_amount", "supplier"] }, 400);
+    // product_slugs may be empty -- a real order can be 100% items that
+    // don't match anything in the scraped catalog (e.g. read off a scanned
+    // receipt with no confident match); total_amount > 0 is the real signal
+    // that this order actually has content, not an empty product_slugs array.
+    if (!body.customer_id || !body.customer_name || !Array.isArray(body.product_slugs) || body.total_amount == null || body.total_amount <= 0 || body.deposit_amount == null || !body.supplier) {
+      return json({ error: "missing_fields", required: ["customer_id", "customer_name", "product_slugs (array, may be empty)", "total_amount (> 0)", "deposit_amount", "supplier"] }, 400);
     }
     // Real customer signature, captured on-screen (canvas draw, works with
     // finger/stylus on iPad) -- stored the same way as receipt photos: the
@@ -902,6 +907,25 @@ async function handleRequest(req: Request, env: Env): Promise<Response> {
     }
     const order = await createOrder({ customer_id: body.customer_id, customer_name: body.customer_name, product_slugs: body.product_slugs, total_amount: body.total_amount, deposit_amount: body.deposit_amount, supplier: body.supplier, worker_id: user.id, signature_key: signatureKey, notes: body.notes });
     return json({ order });
+  }
+  // ── receipt photo scan -- extraction only, never saves anything. The
+  // frontend always routes the result through the normal New Invoice form
+  // for a human to review before it becomes a real order. ─────────────────
+  if (path === "/api/receipts/scan" && req.method === "POST") {
+    if (!can("orders.write.deposit")) return json({ error: "forbidden", missing_atom: "orders.write.deposit" }, 403);
+    let body: { photo_data_url?: string };
+    try {
+      body = await req.json();
+    } catch {
+      return json({ error: "invalid_json" }, 400);
+    }
+    if (!body.photo_data_url) return json({ error: "photo_data_url required" }, 400);
+    try {
+      const parsed = await scanReceiptPhoto(body.photo_data_url);
+      return json({ parsed });
+    } catch (e) {
+      return json({ error: "scan_failed", detail: e instanceof Error ? e.message : String(e) }, 502);
+    }
   }
   if (path === "/api/orders/signature" && req.method === "GET") {
     if (!can("orders.read.own") && !can("orders.read.all")) return json({ error: "forbidden", missing_atom: "orders.read.own" }, 403);

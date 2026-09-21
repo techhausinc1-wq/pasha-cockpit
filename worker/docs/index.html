@@ -2796,6 +2796,12 @@ async function saveRealOrder(items, depositAmount, supplier) {
   const productSlugs = items.map(x => x.slug).filter(Boolean);
   const signatureDataUrl = getSignatureDataUrl();
   const chaiseNotes = items.filter(x => x.isSectional).map(x => x.name + ': ' + x.chaiseSide + ' chaise').join('; ');
+  // Items with no real catalog slug (e.g. read off a scanned receipt with
+  // no confident catalog match) never make it into product_slugs -- record
+  // them here so they're not invisible server-side. They're already on the
+  // printed receipt via inv.items regardless.
+  const customItemNotes = items.filter(x => !x.slug).map(x => 'Not in catalog: ' + x.qty + 'x ' + x.name + ' @ $' + x.price).join('; ');
+  const allNotes = [chaiseNotes, customItemNotes].filter(Boolean).join(' | ');
   const orderRes = await api('/api/orders', {
     method: 'POST',
     body: JSON.stringify({
@@ -2806,7 +2812,7 @@ async function saveRealOrder(items, depositAmount, supplier) {
       deposit_amount: depositAmount,
       supplier: supplier || 'In stock',
       signature_data_url: signatureDataUrl || undefined,
-      notes: chaiseNotes || undefined,
+      notes: allNotes || undefined,
     }),
   });
   return orderRes.order;
@@ -3178,6 +3184,17 @@ async function completeFinancedSale(ev) {
   closeModal();
   setTimeout(() => openPostSaleActions(inv), 100);
 }
+// Real receipt-photo scan, wired up 2026-09-21 (Pasha's meeting notes, item
+// 3 -- "some staff fill out the paper receipt by hand then it needs
+// uploading/photographing into the system"). This button and its OCR-review
+// layout already existed, but `simulateScan()` just showed hardcoded fake
+// data ("Carlos Mendez") and its save button did nothing real
+// (`alert('Saved + filed (demo)')`) -- same dead-stub pattern found and
+// fixed elsewhere in the portfolio (StockScout's moveStock(), etc.).
+// Deliberately does NOT save directly from the OCR result -- it hands the
+// parsed fields to the real New Invoice form for a human to review and
+// correct, then saves through the exact same real path as manual entry
+// (saveRealOrder, chaise-side validation, signature, everything).
 function openScanInvoice() {
   openModal(`
     <div class="modal-head">
@@ -3185,29 +3202,81 @@ function openScanInvoice() {
       <button class="modal-close" onclick="closeModal()">&times;</button>
     </div>
     <div style="text-align:center; padding:30px 20px; background:var(--surface-soft); border-radius:10px; margin-bottom:14px;">
-      <div style="width:80px; height:80px; margin:0 auto 14px; background:var(--accent); border-radius:50%; display:flex; align-items:center; justify-content:center; color:white; font-family:var(--serif); font-size:38px;">+</div>
+      <div style="width:80px; height:80px; margin:0 auto 14px; background:var(--accent); border-radius:50%; display:flex; align-items:center; justify-content:center; color:white; font-family:var(--serif); font-size:38px; cursor:pointer;" onclick="document.getElementById('scan-photo-input').click()">+</div>
+      <input type="file" id="scan-photo-input" accept="image/*" capture="environment" style="display:none;" onchange="handleScanPhoto(event)">
       <div style="font-weight:600; font-size:15px; margin-bottom:6px;">${t('scan_modal_title')}</div>
       <div style="font-size:12px; color:var(--dim); line-height:1.5; max-width:300px; margin:0 auto;">${t('scan_modal_body')}</div>
     </div>
-    <button class="btn primary full" onclick="simulateScan()">${t('scan_simulate')}</button>
+    <button class="btn primary full" onclick="document.getElementById('scan-photo-input').click()">Take or choose a photo</button>
   `);
 }
-function simulateScan() {
+async function handleScanPhoto(event) {
+  const file = event.target.files && event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = async function(e) {
+    openModal(`
+      <div class="modal-head"><div><div style="font-weight:600; font-size:16px;">${t('scan_modal_title')}</div></div></div>
+      <div style="text-align:center; padding:40px 20px; color:var(--dim); font-size:13px;">Reading the form...</div>
+    `);
+    try {
+      const result = await api('/api/receipts/scan', { method: 'POST', body: JSON.stringify({ photo_data_url: e.target.result }) });
+      renderScanReview(result.parsed);
+    } catch (err) {
+      openModal(`
+        <div class="modal-head"><div><div style="font-weight:600; font-size:16px;">${t('scan_modal_title')}</div></div><button class="modal-close" onclick="closeModal()">&times;</button></div>
+        <div style="padding:20px; color:var(--danger); font-size:13px;">Couldn't read that photo: ${(err.message || err)}. Try again with a clearer photo, or use "New digital invoice" to enter it by hand.</div>
+      `);
+    }
+  };
+  reader.readAsDataURL(file);
+}
+function renderScanReview(parsed) {
+  SCAN_REVIEW = parsed;
+  const lowConf = new Set(parsed.low_confidence_fields || []);
+  const flag = (f) => lowConf.has(f) ? ' style="border-color:var(--danger);"' : '';
   openModal(`
     <div class="modal-head">
-      <div><div style="font-weight:600; font-size:16px;">${t('scan_modal_title')} · OCR result</div></div>
+      <div><div style="font-weight:600; font-size:16px;">${t('scan_modal_title')} · read from the photo</div></div>
       <button class="modal-close" onclick="closeModal()">&times;</button>
     </div>
     <div class="card" style="background:var(--accent-soft); margin-bottom:12px;">
-      <div style="font-family:var(--mono); font-size:10px; text-transform:uppercase; letter-spacing:1.5px; color:var(--accent-deep); margin-bottom:6px;">Fields auto-extracted · review before saving</div>
+      <div style="font-family:var(--mono); font-size:10px; text-transform:uppercase; letter-spacing:1.5px; color:var(--accent-deep); margin-bottom:4px;">Read from your photo -- review before continuing</div>
+      ${lowConf.size > 0 ? `<div style="font-size:11.5px; color:var(--danger);">Hard to read, double-check: ${[...lowConf].join(', ')}</div>` : ''}
     </div>
-    <div class="field"><label class="field-lbl">Customer (OCR)</label><input class="input" value="Carlos Mendez"></div>
-    <div class="field"><label class="field-lbl">Date (OCR)</label><input class="input" value="2026-06-08"></div>
-    <div class="field"><label class="field-lbl">Total (OCR)</label><input class="input" value="$849.00"></div>
-    <div class="field"><label class="field-lbl">${t('payment_method')} (OCR)</label><input class="input" value="American Finance"></div>
-    <div class="field"><label class="field-lbl">Notes</label><textarea class="textarea">Queen Pillow-Top Mattress + Box Spring + Frame · deliver Monday</textarea></div>
-    <button class="btn primary full" onclick="alert('Saved + filed (demo)'); closeModal();">${t('save_invoice')}</button>
+    <div class="field"><label class="field-lbl">Customer</label><input class="input" id="scan-name" value="${(parsed.customer_name || '').replace(/"/g,'&quot;')}"${flag('customer_name')}></div>
+    <div class="field"><label class="field-lbl">Phone</label><input class="input" id="scan-phone" value="${(parsed.phone || '').replace(/"/g,'&quot;')}"${flag('phone')}></div>
+    <div class="field"><label class="field-lbl">Address</label><input class="input" id="scan-addr" value="${(parsed.address || '').replace(/"/g,'&quot;')}"${flag('address')}></div>
+    <div class="field"><label class="field-lbl">Payment method (as written)</label><input class="input" id="scan-method" value="${(parsed.payment_method || '').replace(/"/g,'&quot;')}"${flag('payment_method')}></div>
+    <div class="card tight" style="background:var(--surface-soft); margin-bottom:12px;">
+      <div style="font-family:var(--mono); font-size:10px; text-transform:uppercase; letter-spacing:1.5px; color:var(--dim); margin-bottom:6px;">Items read from the form (${(parsed.items||[]).length})</div>
+      ${(parsed.items || []).length === 0 ? `<div style="font-size:12px; color:var(--dim);">No items could be read -- add them by hand on the next screen.</div>` :
+        (parsed.items || []).map(it => `<div style="font-size:13px; padding:4px 0;">${it.qty || 1}&times; ${(it.description || 'item').replace(/</g,'&lt;')} ${it.unit_price ? '· $' + it.unit_price : ''}</div>`).join('')}
+    </div>
+    <button class="btn primary full" onclick="applyScanToNewInvoice()">Continue to New Invoice &rarr;</button>
   `);
+}
+let SCAN_REVIEW = null;
+function applyScanToNewInvoice() {
+  const nameEl = document.getElementById('scan-name'), phoneEl = document.getElementById('scan-phone'), addrEl = document.getElementById('scan-addr'), methodEl = document.getElementById('scan-method');
+  NEW_INV.customer = nameEl ? nameEl.value : (SCAN_REVIEW.customer_name || '');
+  NEW_INV.phone = phoneEl ? phoneEl.value : (SCAN_REVIEW.phone || '');
+  NEW_INV.addr = addrEl ? addrEl.value : (SCAN_REVIEW.address || '');
+  const methodText = ((methodEl ? methodEl.value : SCAN_REVIEW.payment_method) || '').toLowerCase();
+  NEW_INV.method = /card/.test(methodText) ? 'card' : /american finance|\baf\b/.test(methodText) ? 'finance_af' : /snap/.test(methodText) ? 'finance_snap' : /acima|progressive/.test(methodText) ? 'finance_progressive' : 'cash';
+  NEW_INV.items = [];
+  const catalog = REAL_CATALOG.products || [];
+  (SCAN_REVIEW.items || []).forEach(it => {
+    const desc = (it.description || '').toLowerCase();
+    const matched = desc ? catalog.find(p => p.name.toLowerCase().includes(desc) || desc.includes(p.name.toLowerCase())) : null;
+    if (matched) {
+      NEW_INV.items.push({ slug: matched.slug, sku: matched.sku, name: matched.name, price: matched.price, qty: it.qty || 1, isSectional: isSectionalItem(matched), chaiseSide: null });
+    } else {
+      NEW_INV.items.push({ slug: null, sku: 'SCANNED', name: it.description || 'Item from scanned receipt', price: it.unit_price || 0, qty: it.qty || 1, isSectional: false, chaiseSide: null });
+    }
+  });
+  closeModal();
+  setTimeout(() => renderNewInvoice(), 50);
 }
 
 /* ============================================================
