@@ -876,7 +876,7 @@ async function handleRequest(req: Request, env: Env): Promise<Response> {
   }
   if (path === "/api/orders" && req.method === "POST") {
     if (!can("orders.write.deposit")) return json({ error: "forbidden", missing_atom: "orders.write.deposit" }, 403);
-    let body: { customer_id?: string; customer_name?: string; product_slugs?: string[]; total_amount?: number; deposit_amount?: number; supplier?: "Crown Mark" | "Happy Homes" | "In stock" | "Other"; signature_data_url?: string };
+    let body: { customer_id?: string; customer_name?: string; product_slugs?: string[]; total_amount?: number; deposit_amount?: number; supplier?: "Crown Mark" | "Happy Homes" | "In stock" | "Other"; signature_data_url?: string; notes?: string };
     try {
       body = await req.json();
     } catch {
@@ -900,7 +900,7 @@ async function handleRequest(req: Request, env: Env): Promise<Response> {
       signatureKey = "signatures/" + body.customer_id + "-" + Date.now() + "." + ext;
       await (env.RECEIPTS as unknown as { put(key: string, value: Uint8Array, opts?: { httpMetadata?: { contentType?: string } }): Promise<unknown> }).put(signatureKey, bytes, { httpMetadata: { contentType } });
     }
-    const order = await createOrder({ customer_id: body.customer_id, customer_name: body.customer_name, product_slugs: body.product_slugs, total_amount: body.total_amount, deposit_amount: body.deposit_amount, supplier: body.supplier, worker_id: user.id, signature_key: signatureKey });
+    const order = await createOrder({ customer_id: body.customer_id, customer_name: body.customer_name, product_slugs: body.product_slugs, total_amount: body.total_amount, deposit_amount: body.deposit_amount, supplier: body.supplier, worker_id: user.id, signature_key: signatureKey, notes: body.notes });
     return json({ order });
   }
   if (path === "/api/orders/signature" && req.method === "GET") {

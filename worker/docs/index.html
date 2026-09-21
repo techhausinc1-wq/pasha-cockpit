@@ -2620,15 +2620,28 @@ function renderNewInvoice() {
       <div class="card tight" style="background:var(--surface-soft); margin-bottom:12px;">
         <div style="font-family:var(--mono); font-size:10px; text-transform:uppercase; letter-spacing:1.5px; color:var(--dim); margin-bottom:6px;">Items on this invoice</div>
         ${NEW_INV.items.map((x, idx) => `
-          <div style="display:flex; gap:8px; padding:6px 0; border-bottom:0.5px solid var(--border-soft); align-items:center;">
-            <div style="flex:1;">
-              <div style="font-size:13px; font-weight:500;">${x.name}</div>
-              <div style="font-size:10px; color:var(--dim); font-family:var(--mono);">${x.sku} · $${x.price} ${t('each')}</div>
+          <div style="padding:6px 0; border-bottom:0.5px solid var(--border-soft);">
+            <div style="display:flex; gap:8px; align-items:center;">
+              <div style="flex:1;">
+                <div style="font-size:13px; font-weight:500;">${x.name}</div>
+                <div style="font-size:10px; color:var(--dim); font-family:var(--mono);">${x.sku} · $${x.price} ${t('each')}</div>
+              </div>
+              <button onclick="decInvItem(${idx})" style="width:26px; height:26px; border-radius:13px; border:0.5px solid var(--border); background:var(--surface); cursor:pointer; font-size:16px; line-height:1;">−</button>
+              <div style="min-width:24px; text-align:center; font-family:var(--mono); font-weight:600;">${x.qty}</div>
+              <button onclick="incInvItem(${idx})" style="width:26px; height:26px; border-radius:13px; border:0.5px solid var(--primary); background:var(--primary); color:white; cursor:pointer; font-size:16px; line-height:1;">+</button>
+              <div style="min-width:64px; text-align:right; font-family:var(--mono); font-weight:700; font-size:13px;">$${(x.price * x.qty).toLocaleString()}</div>
             </div>
-            <button onclick="decInvItem(${idx})" style="width:26px; height:26px; border-radius:13px; border:0.5px solid var(--border); background:var(--surface); cursor:pointer; font-size:16px; line-height:1;">−</button>
-            <div style="min-width:24px; text-align:center; font-family:var(--mono); font-weight:600;">${x.qty}</div>
-            <button onclick="incInvItem(${idx})" style="width:26px; height:26px; border-radius:13px; border:0.5px solid var(--primary); background:var(--primary); color:white; cursor:pointer; font-size:16px; line-height:1;">+</button>
-            <div style="min-width:64px; text-align:right; font-family:var(--mono); font-weight:700; font-size:13px;">$${(x.price * x.qty).toLocaleString()}</div>
+            ${x.isSectional ? `
+              <div style="margin-top:6px; display:flex; align-items:center; gap:8px;">
+                <label style="font-size:10.5px; color:${x.chaiseSide ? 'var(--dim)' : 'var(--danger)'}; font-weight:600;">Chaise side${x.chaiseSide ? '' : ' (required)'}</label>
+                <select class="select" style="flex:1; padding:4px 8px; font-size:12px;" onchange="setChaiseSide(${idx}, this.value)">
+                  <option value="">Select...</option>
+                  <option value="Left" ${x.chaiseSide === 'Left' ? 'selected' : ''}>Left</option>
+                  <option value="Right" ${x.chaiseSide === 'Right' ? 'selected' : ''}>Right</option>
+                  <option value="Reversible" ${x.chaiseSide === 'Reversible' ? 'selected' : ''}>Reversible / either side</option>
+                </select>
+              </div>
+            ` : ''}
           </div>
         `).join('')}
         <div style="display:flex; justify-content:space-between; padding:10px 0 2px; border-top:1px solid var(--ink); margin-top:6px;">
@@ -2737,12 +2750,24 @@ function getSignatureDataUrl() {
   if (!canvas || !SIG_PAD_HAS_INK) return null;
   return canvas.toDataURL('image/png');
 }
+// Real gap fixed 2026-09-21 (Pasha's meeting notes): sectionals sold here have
+// a real left/right chaise configuration that matters for delivery, but the
+// scraped catalog is too inconsistent to trust a per-SKU default from --
+// spot-checked 110 real sectionals: only ~24 have "LAF/RAF" in their
+// description, 17 say "reversible," the rest say nothing about orientation
+// at all. So instead of guessing per-SKU, every sectional added to an
+// invoice gets its own required chaise-side picker, same as asking out loud
+// on the showroom floor -- see chaiseSide below and its required-before-save
+// check in finalizeNewInvoice().
+function isSectionalItem(it) {
+  return /sectional/i.test(it.name || '') || (it.category_path || []).some(c => /sectional/i.test(c));
+}
 function addInvItem(slug) {
   const it = catalogFind(slug);
   if (!it) return;
   const ex = NEW_INV.items.find(x => x.slug === slug);
   if (ex) ex.qty += 1;
-  else NEW_INV.items.push({ slug: it.slug, sku: it.sku, name: it.name, price: it.price, qty: 1 });
+  else NEW_INV.items.push({ slug: it.slug, sku: it.sku, name: it.name, price: it.price, qty: 1, isSectional: isSectionalItem(it), chaiseSide: null });
   renderNewInvoice();
 }
 function incInvItem(idx) { NEW_INV.items[idx].qty += 1; renderNewInvoice(); }
@@ -2751,12 +2776,17 @@ function decInvItem(idx) {
   if (NEW_INV.items[idx].qty <= 0) NEW_INV.items.splice(idx, 1);
   renderNewInvoice();
 }
+function setChaiseSide(idx, value) { NEW_INV.items[idx].chaiseSide = value || null; }
 // Real backend save -- creates/finds the customer, then a real order
 // (deposit / balance-due ledger, see worker/src/lib/orders.ts). This is
 // what makes a sale actually persist instead of only living in the
 // in-browser INVOICES array. Both the cash/card path (finalizeNewInvoice)
 // and the financed path (completeFinancedSale) call this.
 async function saveRealOrder(items, depositAmount, supplier) {
+  const missingChaise = items.filter(x => x.isSectional && !x.chaiseSide);
+  if (missingChaise.length > 0) {
+    throw new Error('Pick a chaise side (Left/Right/Reversible) for: ' + missingChaise.map(x => x.name).join(', '));
+  }
   const customerName = NEW_INV.customer || 'Walk-in customer';
   const custRes = await api('/api/customers', {
     method: 'POST',
@@ -2765,6 +2795,7 @@ async function saveRealOrder(items, depositAmount, supplier) {
   const totalAmount = items.reduce((s, x) => s + x.price * x.qty, 0);
   const productSlugs = items.map(x => x.slug).filter(Boolean);
   const signatureDataUrl = getSignatureDataUrl();
+  const chaiseNotes = items.filter(x => x.isSectional).map(x => x.name + ': ' + x.chaiseSide + ' chaise').join('; ');
   const orderRes = await api('/api/orders', {
     method: 'POST',
     body: JSON.stringify({
@@ -2775,6 +2806,7 @@ async function saveRealOrder(items, depositAmount, supplier) {
       deposit_amount: depositAmount,
       supplier: supplier || 'In stock',
       signature_data_url: signatureDataUrl || undefined,
+      notes: chaiseNotes || undefined,
     }),
   });
   return orderRes.order;
@@ -2913,7 +2945,7 @@ function printInvoice(invId) {
           <tr>
             <td>${it.qty}</td>
             <td>${it.sku}</td>
-            <td>${it.name}</td>
+            <td>${it.name}${it.chaiseSide ? ` <b>(${it.chaiseSide} chaise)</b>` : ''}</td>
             <td class="r">$${it.price.toLocaleString()}</td>
             <td class="r">$${(it.price * it.qty).toLocaleString()}</td>
           </tr>
