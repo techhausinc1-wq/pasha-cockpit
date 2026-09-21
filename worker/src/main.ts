@@ -876,7 +876,7 @@ async function handleRequest(req: Request, env: Env): Promise<Response> {
   }
   if (path === "/api/orders" && req.method === "POST") {
     if (!can("orders.write.deposit")) return json({ error: "forbidden", missing_atom: "orders.write.deposit" }, 403);
-    let body: { customer_id?: string; customer_name?: string; product_slugs?: string[]; total_amount?: number; deposit_amount?: number; supplier?: "Crown Mark" | "Happy Homes" | "In stock" | "Other" };
+    let body: { customer_id?: string; customer_name?: string; product_slugs?: string[]; total_amount?: number; deposit_amount?: number; supplier?: "Crown Mark" | "Happy Homes" | "In stock" | "Other"; signature_data_url?: string };
     try {
       body = await req.json();
     } catch {
@@ -885,8 +885,31 @@ async function handleRequest(req: Request, env: Env): Promise<Response> {
     if (!body.customer_id || !body.customer_name || !body.product_slugs?.length || body.total_amount == null || body.deposit_amount == null || !body.supplier) {
       return json({ error: "missing_fields", required: ["customer_id", "customer_name", "product_slugs", "total_amount", "deposit_amount", "supplier"] }, 400);
     }
-    const order = await createOrder({ customer_id: body.customer_id, customer_name: body.customer_name, product_slugs: body.product_slugs, total_amount: body.total_amount, deposit_amount: body.deposit_amount, supplier: body.supplier, worker_id: user.id });
+    // Real customer signature, captured on-screen (canvas draw, works with
+    // finger/stylus on iPad) -- stored the same way as receipt photos: the
+    // private RECEIPTS R2 bucket, never a public URL. Optional -- cash/card
+    // walk-in sales don't require it, financed sales' real signature lives
+    // with the lender instead.
+    let signatureKey: string | undefined;
+    if (body.signature_data_url) {
+      const match = /^data:(image\/[a-zA-Z+]+);base64,(.+)$/.exec(body.signature_data_url);
+      if (!match) return json({ error: "signature_data_url must be a base64 image data URL" }, 400);
+      const [, contentType, base64] = match;
+      const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
+      const ext = contentType.split("/")[1] || "png";
+      signatureKey = "signatures/" + body.customer_id + "-" + Date.now() + "." + ext;
+      await (env.RECEIPTS as unknown as { put(key: string, value: Uint8Array, opts?: { httpMetadata?: { contentType?: string } }): Promise<unknown> }).put(signatureKey, bytes, { httpMetadata: { contentType } });
+    }
+    const order = await createOrder({ customer_id: body.customer_id, customer_name: body.customer_name, product_slugs: body.product_slugs, total_amount: body.total_amount, deposit_amount: body.deposit_amount, supplier: body.supplier, worker_id: user.id, signature_key: signatureKey });
     return json({ order });
+  }
+  if (path === "/api/orders/signature" && req.method === "GET") {
+    if (!can("orders.read.own") && !can("orders.read.all")) return json({ error: "forbidden", missing_atom: "orders.read.own" }, 403);
+    const key = url.searchParams.get("key") || "";
+    if (!key.startsWith("signatures/")) return json({ error: "invalid_key" }, 400);
+    const obj = await (env.RECEIPTS as unknown as { get(key: string): Promise<{ body: ReadableStream; httpMetadata?: { contentType?: string } } | null> }).get(key);
+    if (!obj) return json({ error: "not_found" }, 404);
+    return new Response(obj.body, { headers: { "Content-Type": obj.httpMetadata?.contentType || "image/png", ...CORS_HEADERS } });
   }
   if (path === "/api/orders/balance" && req.method === "POST") {
     if (!can("orders.write.balance")) return json({ error: "forbidden", missing_atom: "orders.write.balance" }, 403);

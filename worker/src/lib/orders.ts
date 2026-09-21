@@ -27,6 +27,7 @@ export interface Order {
   created_at: string;
   updated_at: string;
   _ord: number;
+  signature_key?: string;
 }
 
 export function seedOrders(): Order[] {
@@ -86,6 +87,7 @@ export async function createOrder(input: {
   deposit_amount: number;
   supplier: Order["supplier"];
   worker_id: string;
+  signature_key?: string;
 }): Promise<Order> {
   const now = new Date().toISOString();
   const order: Order = {
@@ -102,6 +104,7 @@ export async function createOrder(input: {
     created_at: now,
     updated_at: now,
     _ord: Date.now(),
+    ...(input.signature_key ? { signature_key: input.signature_key } : {}),
   };
   await kvSet(RES, order.id, order);
   // The deposit itself counts toward lifetime value immediately -- full

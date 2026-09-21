@@ -984,6 +984,7 @@ const I18N = {
     payment_method: 'Forma de pago',
     customer_signature: 'Firma del cliente',
     sign_here: 'Firmar aquí',
+    clear_signature: 'Borrar',
     save_invoice: 'Guardar factura',
     method_cash: 'Efectivo',
     method_card: 'Tarjeta',
@@ -1214,6 +1215,7 @@ const I18N = {
     payment_method: 'Payment method',
     customer_signature: 'Customer signature',
     sign_here: 'Sign here',
+    clear_signature: 'Clear',
     save_invoice: 'Save invoice',
     method_cash: 'Cash',
     method_card: 'Card',
@@ -1523,6 +1525,7 @@ const I18N = {
     payment_method: 'Способ оплаты',
     customer_signature: 'Подпись клиента',
     sign_here: 'Подписать здесь',
+    clear_signature: 'Очистить',
     save_invoice: 'Сохранить чек',
     method_cash: 'Наличные',
     method_card: 'Карта',
@@ -2657,13 +2660,82 @@ function renderNewInvoice() {
       </div>
     </div>
     <div class="field"><label class="field-lbl">${t('delivery_address')}</label><input class="input" placeholder="Pickup or full address..." value="${NEW_INV.addr}" oninput="NEW_INV.addr=this.value;"></div>
-    <div class="field" style="background:var(--surface-soft); padding:12px; border-radius:8px; text-align:center;">
-      <div class="field-lbl" style="margin-bottom:8px;">${t('customer_signature')}</div>
-      <div style="border:1px dashed var(--border); border-radius:6px; height:80px; background:var(--surface); display:flex; align-items:center; justify-content:center; color:var(--dim); font-style:italic;">${t('sign_here')}</div>
+    <div class="field" style="background:var(--surface-soft); padding:12px; border-radius:8px;">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+        <div class="field-lbl" style="margin-bottom:0;">${t('customer_signature')}</div>
+        <button type="button" onclick="clearSigPad()" style="border:none; background:none; color:var(--dim); font-size:11px; text-decoration:underline; cursor:pointer; padding:2px 4px;">${t('clear_signature')}</button>
+      </div>
+      <canvas id="sig-pad" style="width:100%; height:100px; display:block; border:1px dashed var(--border); border-radius:6px; background:var(--surface); touch-action:none; cursor:crosshair;"></canvas>
+      <div id="sig-pad-hint" style="font-size:10px; color:var(--dim); margin-top:4px; font-style:italic;">${t('sign_here')}</div>
     </div>
 
     <button class="btn primary full" ${NEW_INV.items.length === 0 ? 'disabled style="opacity:0.5; cursor:not-allowed;"' : ''} onclick="finalizeNewInvoice(event)">${t('save_invoice')} · $${total.toLocaleString()}</button>
   `);
+  initSigPad();
+}
+
+// Real on-screen signature capture -- canvas + Pointer Events, works with
+// finger or stylus on iPad and mouse on desktop. Replaces what used to be
+// a purely decorative "sign here" box that never actually captured
+// anything (inv.signed was hardcoded false everywhere). Sized for the
+// device's real pixel ratio so lines aren't blurry on Retina/iPad screens.
+let SIG_PAD_HAS_INK = false;
+function initSigPad() {
+  const canvas = document.getElementById('sig-pad');
+  if (!canvas) return;
+  const ratio = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = Math.max(1, Math.round(rect.width * ratio));
+  canvas.height = Math.max(1, Math.round(rect.height * ratio));
+  const ctx = canvas.getContext('2d');
+  ctx.scale(ratio, ratio);
+  ctx.lineWidth = 2;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.strokeStyle = getComputedStyle(document.body).getPropertyValue('--ink') || '#1a1410';
+  SIG_PAD_HAS_INK = false;
+  let drawing = false;
+  let lastX = 0, lastY = 0;
+  function pos(e) {
+    const r = canvas.getBoundingClientRect();
+    return { x: e.clientX - r.left, y: e.clientY - r.top };
+  }
+  canvas.onpointerdown = (e) => {
+    drawing = true;
+    const p = pos(e);
+    lastX = p.x; lastY = p.y;
+    canvas.setPointerCapture(e.pointerId);
+  };
+  canvas.onpointermove = (e) => {
+    if (!drawing) return;
+    const p = pos(e);
+    ctx.beginPath();
+    ctx.moveTo(lastX, lastY);
+    ctx.lineTo(p.x, p.y);
+    ctx.stroke();
+    lastX = p.x; lastY = p.y;
+    if (!SIG_PAD_HAS_INK) {
+      SIG_PAD_HAS_INK = true;
+      const hint = document.getElementById('sig-pad-hint');
+      if (hint) hint.style.display = 'none';
+    }
+  };
+  canvas.onpointerup = () => { drawing = false; };
+  canvas.onpointercancel = () => { drawing = false; };
+}
+function clearSigPad() {
+  const canvas = document.getElementById('sig-pad');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  SIG_PAD_HAS_INK = false;
+  const hint = document.getElementById('sig-pad-hint');
+  if (hint) hint.style.display = '';
+}
+function getSignatureDataUrl() {
+  const canvas = document.getElementById('sig-pad');
+  if (!canvas || !SIG_PAD_HAS_INK) return null;
+  return canvas.toDataURL('image/png');
 }
 function addInvItem(slug) {
   const it = catalogFind(slug);
@@ -2692,6 +2764,7 @@ async function saveRealOrder(items, depositAmount, supplier) {
   });
   const totalAmount = items.reduce((s, x) => s + x.price * x.qty, 0);
   const productSlugs = items.map(x => x.slug).filter(Boolean);
+  const signatureDataUrl = getSignatureDataUrl();
   const orderRes = await api('/api/orders', {
     method: 'POST',
     body: JSON.stringify({
@@ -2701,6 +2774,7 @@ async function saveRealOrder(items, depositAmount, supplier) {
       total_amount: totalAmount,
       deposit_amount: depositAmount,
       supplier: supplier || 'In stock',
+      signature_data_url: signatureDataUrl || undefined,
     }),
   });
   return orderRes.order;
@@ -2737,7 +2811,7 @@ async function finalizeNewInvoice(ev) {
     method: NEW_INV.method,
     status: NEW_INV.method === 'cash' ? 'paid' : NEW_INV.method === 'card' ? 'paid' : 'pending',
     source: 'digital',
-    signed: false,
+    signed: !!order.signature_key,
     deliv_addr: NEW_INV.addr || 'Pickup',
     salesperson: CURRENT_USER.id
   };
