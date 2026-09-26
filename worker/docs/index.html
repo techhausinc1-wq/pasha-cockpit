@@ -867,6 +867,7 @@ h3 {
   <section class="view" id="view-team"></section>
   <section class="view" id="view-live"></section>
   <section class="view" id="view-alerts"></section>
+  <section class="view" id="view-money"></section>
 </main>
 
 <div class="modal-back" id="modal" onclick="if(event.target===this)closeModal()">
@@ -905,6 +906,21 @@ const I18N = {
     nav_alerts: 'Alertas',
     alerts_intro: 'Condiciones reales que necesitan tu atencion -- facturas vencidas y financiamiento pendiente hace mas de 24h.',
     alerts_empty: 'Sin alertas activas en este momento.',
+    nav_money: 'Finanzas',
+    money_intro: 'Posicion de caja, cuentas por pagar, obligaciones fiscales, y cada solicitud de financiamiento -- solo para el dueno.',
+    money_cash: 'Posicion de caja',
+    money_bank_balance: 'Saldo bancario (operativo)',
+    money_pending_payments: 'Pagos pendientes a proveedores',
+    money_scheduled_outflow: 'Salida programada, proximos 30 dias',
+    money_ap: 'Cuentas por pagar',
+    money_ap_empty: 'Nada pendiente.',
+    money_tax: 'Obligaciones fiscales y de cumplimiento',
+    money_tax_empty: 'Nada registrado.',
+    money_financing: 'Solicitudes de financiamiento',
+    money_financing_empty: 'Sin solicitudes todavia.',
+    money_lenders: 'Prestamistas',
+    money_lender_configured: 'Activo',
+    money_lender_not_configured: 'Aun no conectado',
     nav_reels: 'Videos',
     nav_scout: 'Scout',
     nav_suppliers: 'Proveedores',
@@ -1136,6 +1152,21 @@ const I18N = {
     nav_alerts: 'Alerts',
     alerts_intro: 'Real conditions that need your attention -- overdue supplier invoices and financing stuck pending over 24h.',
     alerts_empty: 'No active alerts right now.',
+    nav_money: 'Money',
+    money_intro: 'Cash position, bills owed, tax obligations, and every financing application in the waterfall -- owner-only.',
+    money_cash: 'Cash position',
+    money_bank_balance: 'Bank balance (operating)',
+    money_pending_payments: 'Pending vendor payments',
+    money_scheduled_outflow: 'Scheduled outflow, next 30 days',
+    money_ap: 'Bills / accounts payable',
+    money_ap_empty: 'Nothing open.',
+    money_tax: 'Tax & compliance obligations',
+    money_tax_empty: 'Nothing on file.',
+    money_financing: 'Financing applications',
+    money_financing_empty: 'No applications yet.',
+    money_lenders: 'Lenders',
+    money_lender_configured: 'Live',
+    money_lender_not_configured: 'Not connected yet',
     nav_reels: 'Videos',
     nav_scout: 'Scout',
     nav_suppliers: 'Suppliers',
@@ -1369,6 +1400,21 @@ const I18N = {
     nav_alerts: 'Оповещения',
     alerts_intro: 'Реальные ситуации, требующие внимания -- просроченные счета поставщиков и финансирование в ожидании более 24 часов.',
     alerts_empty: 'Сейчас активных оповещений нет.',
+    nav_money: 'Финансы',
+    money_intro: 'Денежная позиция, счета к оплате, налоговые обязательства и все заявки на финансирование -- только для владельца.',
+    money_cash: 'Денежная позиция',
+    money_bank_balance: 'Остаток на счёте (операционный)',
+    money_pending_payments: 'Ожидающие платежи поставщикам',
+    money_scheduled_outflow: 'Запланированный отток, следующие 30 дней',
+    money_ap: 'Счета к оплате',
+    money_ap_empty: 'Нет открытых счетов.',
+    money_tax: 'Налоговые обязательства и комплаенс',
+    money_tax_empty: 'Ничего не зафиксировано.',
+    money_financing: 'Заявки на финансирование',
+    money_financing_empty: 'Пока нет заявок.',
+    money_lenders: 'Кредиторы',
+    money_lender_configured: 'Подключено',
+    money_lender_not_configured: 'Ещё не подключено',
     auto_reply_card: 'Автоответ включён',
     auto_reply_intro: '99% сообщений — это "это ещё в наличии?". Система отправляет шаблонный ответ через 30 секунд. Если ответишь первым — ничего не отправится. Если клиент пишет ещё раз после автоответа — уведомление получит вся команда.',
     auto_reply_queue: 'В очереди на автоответ',
@@ -1593,7 +1639,7 @@ function t(k) { return I18N[LANG][k] || I18N.en[k] || k; }
 
 const USERS = [
   { id: 'pasha', name: 'Pavil Nimerovsky', role: 'owner', avatar: 'P', perms: ['inbox_all','inventory_read','inventory_write','customers','customers_email','ads','team','money','reviews'] },
-  { id: 'ivan', name: 'Ivan', role: 'admin', avatar: 'I', perms: ['inbox_all','inventory_read','inventory_write','customers','customers_email','ads','team','reviews'] },
+  { id: 'ivan', name: 'Ivan', role: 'admin', avatar: 'I', perms: ['inbox_all','inventory_read','inventory_write','customers','customers_email','ads','team','reviews','money'] },
   { id: 'christian', name: 'Christian', role: 'sales', avatar: 'C', perms: ['inbox_assigned','inventory_read','customers','reviews'] },
   { id: 'maria', name: 'María', role: 'sales', avatar: 'M', perms: ['inbox_assigned','inventory_read','customers','reviews'] },
   { id: 'jose', name: 'José', role: 'delivery', avatar: 'J', perms: ['inventory_read'] },
@@ -1841,6 +1887,7 @@ function renderNav() {
     ['live', 'nav_live'],
     ['alerts', 'nav_alerts']
   ];
+  if (userCanSee('money')) tabs.push(['money', 'nav_money']);
   document.getElementById('nav').innerHTML = tabs.map(([v, k]) =>
     `<button data-view="${v}" class="${v === CURRENT_VIEW ? 'active' : ''}" onclick="setView('${v}')">${t(k)}</button>`
   ).join('');
@@ -1870,6 +1917,7 @@ function renderView() {
   if (CURRENT_VIEW === 'team') renderTeam();
   if (CURRENT_VIEW === 'live') renderLive();
   if (CURRENT_VIEW === 'alerts') renderAlerts();
+  if (CURRENT_VIEW === 'money') renderMoney();
 }
 
 /* ============================================================
@@ -4944,7 +4992,7 @@ function saveLiveConfig(apiBase) {
   renderLive();
 }
 let liveAutoLoaded = false;
-let LIVE_DATA = { customers: null, orders: null, deliveries: null, threads: null, dashboard: null, ap: null, error: null, loading: false };
+let LIVE_DATA = { customers: null, orders: null, deliveries: null, threads: null, dashboard: null, ap: null, tax: null, financingApps: null, lenders: null, error: null, loading: false };
 
 // Facebook/Instagram OAuth connect entry point (item 5) -- see
 // worker/src/lib/meta-oauth.ts. One click sends Pasha to Facebooks own
@@ -4984,13 +5032,16 @@ async function refreshLiveData() {
   if (CURRENT_VIEW === 'live') renderLive();
   if (CURRENT_VIEW === 'morning') renderMorning();
   try {
-    const [customers, orders, deliveries, threads, dashboard, ap] = await Promise.all([
+    const [customers, orders, deliveries, threads, dashboard, ap, tax, financingApps, lenders] = await Promise.all([
       liveFetch('/api/customers'),
       liveFetch('/api/orders'),
       liveFetch('/api/deliveries'),
       liveFetch('/api/threads'),
       liveFetch('/api/dashboard/today'),
       userCanSee('money') ? liveFetch('/api/money/ap') : Promise.resolve({ invoices: [] }),
+      userCanSee('money') ? liveFetch('/api/money/tax') : Promise.resolve({ obligations: [] }),
+      userCanSee('money') ? liveFetch('/api/financing/applications') : Promise.resolve({ applications: [] }),
+      userCanSee('money') ? liveFetch('/api/financing/lenders') : Promise.resolve({ lenders: [] }),
     ]);
     LIVE_DATA.customers = customers.customers;
     LIVE_DATA.orders = orders.orders;
@@ -4999,6 +5050,9 @@ async function refreshLiveData() {
     LIVE_DATA.allThreads = threads.threads || [];
     LIVE_DATA.dashboard = dashboard;
     LIVE_DATA.ap = ap.invoices || [];
+    LIVE_DATA.tax = tax.obligations || [];
+    LIVE_DATA.financingApps = financingApps.applications || [];
+    LIVE_DATA.lenders = lenders.lenders || [];
   } catch (err) {
     LIVE_DATA.error = err.message;
   }
@@ -5220,6 +5274,95 @@ function renderAlerts() {
     <button class="btn ghost" style="margin-top:10px;" onclick="loadAlerts()">Refresh</button>
   `;
   document.getElementById('view-alerts').innerHTML = html;
+}
+
+/* ============================================================
+   MONEY VIEW — owner-only: cash position, AP, tax, financing waterfall
+   ============================================================ */
+function renderMoney() {
+  if (!userCanSee('money')) {
+    document.getElementById('view-money').innerHTML = '<div class="empty">Not available for this account.</div>';
+    return;
+  }
+  if (!liveAutoLoaded && LIVE_DATA.ap === null && !LIVE_DATA.loading) {
+    liveAutoLoaded = true;
+    refreshLiveData();
+  }
+  if (LIVE_DATA.loading || LIVE_DATA.ap === null) {
+    document.getElementById('view-money').innerHTML = `
+      <h3>${t('nav_money')}</h3>
+      <div class="card"><div class="empty">${LIVE_DATA.error ? 'Could not reach the worker: ' + LIVE_DATA.error : 'Loading real data...'}</div>
+      ${LIVE_DATA.error ? '<button class="btn ghost" onclick="refreshLiveData()">Retry</button>' : ''}</div>
+    `;
+    return;
+  }
+
+  const ap = LIVE_DATA.ap || [];
+  const apOpen = ap.filter(i => i.status === 'open' || i.status === 'overdue');
+  const apOpenTotal = apOpen.reduce((s, i) => s + i.amount, 0);
+  const tax = LIVE_DATA.tax || [];
+  const apps = LIVE_DATA.financingApps || [];
+  const lenders = LIVE_DATA.lenders || [];
+
+  const html = `
+    <h3>${t('nav_money')}</h3>
+    <p class="lead">${t('money_intro')}</p>
+
+    <div class="card-head" style="margin-bottom:6px;"><span class="card-title">${t('money_cash')}</span></div>
+    <div class="card" style="margin-bottom:14px;">
+      <div class="row"><span class="lbl">${t('money_bank_balance')}</span><span class="val">$${BANK.balance.toLocaleString()}</span></div>
+      <div class="row"><span class="lbl">${t('money_pending_payments')}</span><span class="val" style="color:var(--warning);">$${BANK.pending_payments.toLocaleString()}</span></div>
+      <div class="row"><span class="lbl">${t('money_scheduled_outflow')}</span><span class="val">$${BANK.scheduled_outflow_30d.toLocaleString()}</span></div>
+    </div>
+
+    <div class="card-head" style="margin-bottom:6px;"><span class="card-title">${t('money_ap')}</span><span class="card-extra">$${apOpenTotal.toLocaleString()} open</span></div>
+    <div class="card ${apOpen.some(i => i.status === 'overdue') ? 'attn' : ''}" style="padding:0; margin-bottom:14px;">
+      ${apOpen.length === 0 ? `<div class="empty">${t('money_ap_empty')}</div>` : apOpen.map(i => `
+        <div class="row">
+          <div style="flex:1;">
+            <div class="lbl">${i.supplier} &middot; ${i.invoice_no}</div>
+            <div class="meta">Due ${i.due_date}${i.status === 'overdue' ? ' &middot; <b style="color:var(--danger);">overdue</b>' : ''}</div>
+          </div>
+          <div class="val">$${i.amount.toLocaleString()}</div>
+        </div>
+      `).join('')}
+    </div>
+
+    <div class="card-head" style="margin-bottom:6px;"><span class="card-title">${t('money_tax')}</span></div>
+    <div class="card" style="padding:0; margin-bottom:14px;">
+      ${tax.length === 0 ? `<div class="empty">${t('money_tax_empty')}</div>` : tax.map(x => `
+        <div class="row">
+          <div style="flex:1;">
+            <div class="lbl">${x.name} <span class="badge ${x.status === 'overdue' ? 'danger' : x.status === 'due' ? 'warning' : 'success'}">${x.status}</span></div>
+            <div class="meta">${x.agency} &middot; due ${x.due_date}${x.notes ? ' &middot; ' + x.notes : ''}</div>
+          </div>
+          ${x.amount_accrued ? `<div class="val">$${x.amount_accrued.toLocaleString()}</div>` : ''}
+        </div>
+      `).join('')}
+    </div>
+
+    <div class="card-head" style="margin-bottom:6px;"><span class="card-title">${t('money_lenders')}</span></div>
+    <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:14px;">
+      ${lenders.map(l => `<span class="badge ${l.configured ? 'success' : 'warning'}">${l.name} &middot; ${l.configured ? t('money_lender_configured') : t('money_lender_not_configured')}</span>`).join('')}
+    </div>
+
+    <div class="card-head" style="margin-bottom:6px;"><span class="card-title">${t('money_financing')}</span></div>
+    <div class="card" style="padding:0;">
+      ${apps.length === 0 ? `<div class="empty">${t('money_financing_empty')}</div>` : apps.map(a => {
+        const last = a.lender_attempts[a.lender_attempts.length - 1];
+        return `
+        <div class="row">
+          <div style="flex:1;">
+            <div class="lbl">${a.customer_name} &middot; ticket #${a.ticket} <span class="badge ${a.status === 'funded' || a.status === 'approved' ? 'success' : a.status === 'declined' ? 'danger' : 'warning'}">${a.status}</span></div>
+            <div class="meta">${a.lender_attempts.map(la => la.lender + ' (' + la.decision + (la.amount ? ' $' + la.amount.toLocaleString() : '') + ')').join(' -> ')}</div>
+          </div>
+          ${last && last.amount ? `<div class="val">$${last.amount.toLocaleString()}</div>` : ''}
+        </div>
+      `; }).join('')}
+    </div>
+    <button class="btn ghost" style="margin-top:10px;" onclick="refreshLiveData()">Refresh</button>
+  `;
+  document.getElementById('view-money').innerHTML = html;
 }
 
 /* -------- MODAL HELPERS -------- */

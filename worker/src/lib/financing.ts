@@ -1,20 +1,29 @@
 // Real financing-waterfall submission code paths -- item 6. AFF, Koalafi,
-// Progressive Leasing, Snap Finance, Kafene. Each lender is a real dealer
-// API gated behind a signed dealer agreement Pasha does not have yet, so
-// every function here is gated on its own env var with the same graceful
-// "not configured" fallback pattern as Twilio/Square/QuickBooks in
-// feliks-valet-cockpit/worker/main.ts -- correct request shape and auth
-// header, inert until Pasha supplies real dealer credentials. See
-// docs/FINANCING-SETUP.md for what to request from each lender and where
-// the exact endpoint path should be confirmed against that lenders own
-// dealer-portal API docs (none of the five publish a fully open public API
-// reference -- access is provisioned per-dealer after underwriting
-// approval, so the paths below are each lenders documented integration
-// pattern as of this writing, not guaranteed byte-for-byte current).
+// Progressive Leasing, Snap Finance, Kafene, Acima Leasing. Each lender is
+// a real dealer API gated behind a signed dealer agreement Pasha does not
+// have yet, so every function here is gated on its own env var with the
+// same graceful "not configured" fallback pattern as Twilio/Square/
+// QuickBooks in feliks-valet-cockpit/worker/main.ts -- correct request
+// shape and auth header, inert until Pasha supplies real dealer
+// credentials. See docs/FINANCING-SETUP.md for what to request from each
+// lender and where the exact endpoint path should be confirmed against
+// that lenders own dealer-portal API docs (none of these publish a fully
+// open public API reference -- access is provisioned per-dealer after
+// underwriting approval, so the paths below are each lenders documented
+// integration pattern as of this writing, not guaranteed byte-for-byte
+// current).
+//
+// Acima added 2026-09-26 after confirming live on 210discountfurniture.com
+// itself (/financing-e-leasing-purchase-options lists Snap Finance,
+// Progressive Leasing, and Acima Leasing by name -- Acima was missing from
+// this file entirely before now). AFF, Koalafi, and Kafene do NOT appear
+// anywhere on the live site -- flagged to Ivan rather than removed, since
+// they could be real relationships just not advertised online; don't
+// assume either way without him confirming.
 
 import { getEnv } from "./env.ts";
 
-export type LenderName = "AFF" | "Koalafi" | "Progressive" | "Snap" | "Kafene";
+export type LenderName = "AFF" | "Koalafi" | "Progressive" | "Snap" | "Kafene" | "Acima";
 
 export interface FinancingApplicant {
   firstName: string;
@@ -204,6 +213,34 @@ async function submitKafene(applicant: FinancingApplicant): Promise<FinancingRes
   }
 }
 
+// ── Acima Leasing ────────────────────────────────────────────────────────
+// Merchant/POS API, static API key header. Requires ACIMA_API_KEY +
+// ACIMA_MERCHANT_ID. Real, confirmed-live lender on 210discountfurniture.com.
+async function submitAcima(applicant: FinancingApplicant): Promise<FinancingResult> {
+  const apiKey = getEnv("ACIMA_API_KEY") ?? "";
+  const merchantId = getEnv("ACIMA_MERCHANT_ID") ?? "";
+  if (!apiKey || !merchantId) {
+    return { configured: false, lender: "Acima", ok: false, message: "Acima Leasing not configured (see docs/FINANCING-SETUP.md) -- set ACIMA_API_KEY, ACIMA_MERCHANT_ID." };
+  }
+  try {
+    const res = await fetch("https://api.acimacredit.com/merchant/v1/applications", {
+      method: "POST",
+      headers: { Authorization: "Bearer " + apiKey, "Content-Type": "application/json" },
+      body: JSON.stringify({
+        merchantId,
+        customer: { firstName: applicant.firstName, lastName: applicant.lastName, phone: applicant.phone, email: applicant.email },
+        address: { street1: applicant.addressLine1, city: applicant.city, state: applicant.state, zip: applicant.zip },
+        cartTotal: applicant.cartTotal,
+      }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) return { configured: true, lender: "Acima", ok: false, message: "Acima application failed: " + JSON.stringify(data) };
+    return { configured: true, lender: "Acima", ok: true, decision: data.status, approvedAmount: data.approvedAmount, applicationUrl: data.applicationUrl, message: "Acima Leasing application submitted." };
+  } catch (e) {
+    return { configured: true, lender: "Acima", ok: false, message: "Acima request error: " + (e instanceof Error ? e.message : String(e)) };
+  }
+}
+
 // Single-lender submit, used by the /api/financing/submit/:lender route so
 // a worker can retry just the next lender in the waterfall (matches the
 // existing SampleApplication.lender_attempts shape -- one attempt at a
@@ -213,6 +250,7 @@ export async function submitToLender(lender: LenderName, applicant: FinancingApp
   if (lender === "Koalafi") return submitKoalafi(applicant);
   if (lender === "Progressive") return submitProgressive(applicant);
   if (lender === "Snap") return submitSnap(applicant);
+  if (lender === "Acima") return submitAcima(applicant);
   return submitKafene(applicant);
 }
 
@@ -221,5 +259,6 @@ export function lenderConfigured(lender: LenderName): boolean {
   if (lender === "Koalafi") return Boolean(getEnv("KOALAFI_API_KEY"));
   if (lender === "Progressive") return Boolean(getEnv("PROGRESSIVE_API_KEY"));
   if (lender === "Snap") return Boolean(getEnv("SNAP_API_KEY"));
+  if (lender === "Acima") return Boolean(getEnv("ACIMA_API_KEY"));
   return Boolean(getEnv("KAFENE_API_KEY"));
 }

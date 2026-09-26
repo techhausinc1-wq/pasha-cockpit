@@ -580,7 +580,7 @@ async function handleRequest(req: Request, env: Env): Promise<Response> {
     return json(result);
   }
   if (path === "/api/financing/lenders" && req.method === "GET") {
-    const lenders: LenderName[] = ["AFF", "Koalafi", "Progressive", "Snap", "Kafene"];
+    const lenders: LenderName[] = ["AFF", "Koalafi", "Progressive", "Snap", "Kafene", "Acima"];
     return json({ lenders: lenders.map((l) => ({ name: l, configured: lenderConfigured(l) })) });
   }
 

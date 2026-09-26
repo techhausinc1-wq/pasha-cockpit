@@ -173,7 +173,7 @@ export interface SampleApplication {
   started_at: string;
   status: "in-progress" | "approved" | "declined" | "funded";
   lender_attempts: {
-    lender: "AFF" | "Koalafi" | "Progressive" | "Snap" | "Kafene";
+    lender: "AFF" | "Koalafi" | "Progressive" | "Snap" | "Kafene" | "Acima";
     decision: "approved" | "declined" | "pending";
     amount?: number;
     at: string;
