@@ -81,6 +81,13 @@ import {
   seedSupplierProductsIfEmpty,
 } from "./lib/supplier-colors.ts";
 import {
+  listAdChannels,
+  seedAdChannelsIfEmpty,
+  updateAdChannelStatus,
+  addAdChannelNote,
+  deleteAdChannel,
+} from "./lib/advertising-channels.ts";
+import {
   createOrder,
   findOrderById,
   listOrders,
@@ -225,6 +232,7 @@ async function ensureSeeded(): Promise<void> {
   await seedOrdersIfEmpty();
   await seedDeliveriesIfEmpty();
   await seedSupplierProductsIfEmpty();
+  await seedAdChannelsIfEmpty();
   seededThisIsolate = true;
 }
 
@@ -927,6 +935,47 @@ async function handleRequest(req: Request, env: Env): Promise<Response> {
     if (!can("catalog.write.basic")) return json({ error: "forbidden", missing_atom: "catalog.write.basic" }, 403);
     const id = path.split("/")[3];
     const ok = await deleteSupplierProduct(id);
+    if (!ok) return json({ error: "not_found" }, 404);
+    return json({ success: true });
+  }
+
+  // ── advertising channels (real outbound radio/JBSA/billboard/TV/EDDM tracker) ──
+  if (path === "/api/advertising-channels" && req.method === "GET") {
+    if (!can("advertising.read")) return json({ error: "forbidden", missing_atom: "advertising.read" }, 403);
+    return json({ channels: await listAdChannels() });
+  }
+  if (path.startsWith("/api/advertising-channels/") && path.endsWith("/status") && req.method === "POST") {
+    if (!can("advertising.write")) return json({ error: "forbidden", missing_atom: "advertising.write" }, 403);
+    const id = path.split("/")[3];
+    let body: { status?: "not-contacted" | "contacted" | "in-progress" | "declined" | "signed" };
+    try {
+      body = await req.json();
+    } catch {
+      return json({ error: "invalid_json" }, 400);
+    }
+    if (!body.status) return json({ error: "status_required" }, 400);
+    const channel = await updateAdChannelStatus(id, body.status);
+    if (!channel) return json({ error: "not_found" }, 404);
+    return json({ channel });
+  }
+  if (path.startsWith("/api/advertising-channels/") && path.endsWith("/notes") && req.method === "POST") {
+    if (!can("advertising.write")) return json({ error: "forbidden", missing_atom: "advertising.write" }, 403);
+    const id = path.split("/")[3];
+    let body: { text?: string };
+    try {
+      body = await req.json();
+    } catch {
+      return json({ error: "invalid_json" }, 400);
+    }
+    if (!body.text || !body.text.trim()) return json({ error: "text_required" }, 400);
+    const channel = await addAdChannelNote(id, body.text.trim(), user.name);
+    if (!channel) return json({ error: "not_found" }, 404);
+    return json({ channel });
+  }
+  if (path.startsWith("/api/advertising-channels/") && path.split("/").length === 4 && req.method === "DELETE") {
+    if (!can("advertising.write")) return json({ error: "forbidden", missing_atom: "advertising.write" }, 403);
+    const id = path.split("/")[3];
+    const ok = await deleteAdChannel(id);
     if (!ok) return json({ error: "not_found" }, 404);
     return json({ success: true });
   }

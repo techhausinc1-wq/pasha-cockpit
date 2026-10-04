@@ -74,7 +74,10 @@ export type Atom =
   | "scout.read"
   | "scout.write"
   // Ad-spend/ROI dashboards (item 6)
-  | "ads.read";
+  | "ads.read"
+  // Outbound advertising-channel tracker (radio/JBSA/billboard/TV/EDDM)
+  | "advertising.read"
+  | "advertising.write";
 
 export type Role =
   | "owner"
@@ -138,6 +141,8 @@ export const ROLE_ATOMS: Record<Role, Atom[]> = {
     "scout.read",
     "scout.write",
     "ads.read",
+    "advertising.read",
+    "advertising.write",
   ],
   "sales-lead": [
     "messages.read.own",
@@ -173,6 +178,8 @@ export const ROLE_ATOMS: Record<Role, Atom[]> = {
     "reels.write",
     "scout.read",
     "scout.write",
+    "advertising.read",
+    "advertising.write",
   ],
   "showroom-associate": [
     "messages.read.own",
@@ -231,6 +238,7 @@ export const ROLE_ATOMS: Record<Role, Atom[]> = {
     "customers.read",
     "orders.read.all",
     "deliveries.read",
+    "advertising.read",
   ],
 };
 

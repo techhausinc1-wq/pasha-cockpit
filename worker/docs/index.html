@@ -861,6 +861,7 @@ h3 {
   <section class="view" id="view-invoices"></section>
   <section class="view" id="view-customers"></section>
   <section class="view" id="view-ads"></section>
+  <section class="view" id="view-advertising"></section>
   <section class="view" id="view-scout"></section>
   <section class="view" id="view-reels"></section>
   <section class="view" id="view-suppliers"></section>
@@ -868,6 +869,7 @@ h3 {
   <section class="view" id="view-live"></section>
   <section class="view" id="view-alerts"></section>
   <section class="view" id="view-money"></section>
+  <section class="view" id="view-manual"></section>
 </main>
 
 <div class="modal-back" id="modal" onclick="if(event.target===this)closeModal()">
@@ -900,7 +902,9 @@ const I18N = {
     nav_inventory: 'Inventario',
     nav_invoices: 'Facturas',
     nav_customers: 'Clientes',
-    nav_ads: 'Publicidad',
+    nav_ads: 'Rendimiento',
+    nav_advertising: 'Publicidad',
+    nav_manual: 'Manual',
     nav_team: 'Equipo',
     nav_live: 'Operaciones',
     nav_alerts: 'Alertas',
@@ -1146,7 +1150,9 @@ const I18N = {
     nav_inventory: 'Inventory',
     nav_invoices: 'Invoices',
     nav_customers: 'Customers',
-    nav_ads: 'Ads',
+    nav_ads: 'Ad Performance',
+    nav_advertising: 'Advertising',
+    nav_manual: 'Manual',
     nav_team: 'Team',
     nav_live: 'Operations',
     nav_alerts: 'Alerts',
@@ -1392,7 +1398,9 @@ const I18N = {
     nav_inventory: 'Склад',
     nav_invoices: 'Чеки',
     nav_customers: 'Клиенты',
-    nav_ads: 'Реклама',
+    nav_ads: 'Эффективность рекламы',
+    nav_advertising: 'Реклама',
+    nav_manual: 'Инструкция',
     nav_reels: 'Видео',
     nav_suppliers: 'Поставщики',
     nav_team: 'Команда',
@@ -1892,6 +1900,7 @@ function renderNav() {
     ['invoices', 'nav_invoices'],
     ['customers', 'nav_customers'],
     ['ads', 'nav_ads'],
+    ['advertising', 'nav_advertising'],
     ['scout', 'nav_scout'],
     ['reels', 'nav_reels'],
     ['suppliers', 'nav_suppliers'],
@@ -1900,6 +1909,7 @@ function renderNav() {
     ['alerts', 'nav_alerts']
   ];
   if (userCanSee('money')) tabs.push(['money', 'nav_money']);
+  tabs.push(['manual', 'nav_manual']);
   document.getElementById('nav').innerHTML = tabs.map(([v, k]) =>
     `<button data-view="${v}" class="${v === CURRENT_VIEW ? 'active' : ''}" onclick="setView('${v}')">${t(k)}</button>`
   ).join('');
@@ -1923,6 +1933,8 @@ function renderView() {
   if (CURRENT_VIEW === 'invoices') renderInvoices();
   if (CURRENT_VIEW === 'customers') renderCustomers();
   if (CURRENT_VIEW === 'ads') renderAds();
+  if (CURRENT_VIEW === 'advertising') renderAdvertising();
+  if (CURRENT_VIEW === 'manual') renderManual();
   if (CURRENT_VIEW === 'scout') renderScout();
   if (CURRENT_VIEW === 'reels') renderReels();
   if (CURRENT_VIEW === 'suppliers') renderSuppliers();
@@ -3675,6 +3687,168 @@ function renderAds() {
     <button class="btn ghost full" style="margin-top:12px;" onclick="openResearchIdea()">${t('add_research_idea')}</button>
   `;
   document.getElementById('view-ads').innerHTML = html;
+}
+
+/* -------- ADVERTISING CHANNELS (real outbound radio/JBSA/billboard/TV/EDDM) -------- */
+let AD_CHANNELS = null;
+let AD_CHANNELS_LOADING = false;
+
+async function loadAdChannels() {
+  AD_CHANNELS_LOADING = true;
+  try {
+    const data = await api('/api/advertising-channels');
+    AD_CHANNELS = data.channels;
+  } catch (e) {
+    AD_CHANNELS = { error: e.message || String(e) };
+  }
+  AD_CHANNELS_LOADING = false;
+}
+
+const AD_CHANNEL_CATEGORY_LABEL = {
+  'jbsa': 'JBSA / Military Base',
+  'radio': 'Local Radio',
+  'billboard': 'Billboard / Outdoor',
+  'tv': 'Spanish-Language TV',
+  'direct-mail': 'Direct Mail (EDDM)',
+};
+const AD_CHANNEL_CATEGORY_ORDER = ['jbsa', 'radio', 'billboard', 'tv', 'direct-mail'];
+
+function adChannelStatusBadge(status) {
+  if (status === 'signed') return '<span class="badge success">Signed</span>';
+  if (status === 'in-progress') return '<span class="badge warning">In progress</span>';
+  if (status === 'declined') return '<span class="badge danger">Declined</span>';
+  if (status === 'contacted') return '<span class="badge info">Contacted</span>';
+  return '<span class="badge">Not contacted</span>';
+}
+
+function renderAdvertising() {
+  if (!userCanSee('advertising')) {
+    document.getElementById('view-advertising').innerHTML = `<div class="empty">${t('permissions')} — needs <code>advertising</code></div>`;
+    return;
+  }
+  if (AD_CHANNELS === null && !AD_CHANNELS_LOADING) {
+    loadAdChannels().then(function() { if (CURRENT_VIEW === 'advertising') renderAdvertising(); });
+  }
+  if (AD_CHANNELS_LOADING || AD_CHANNELS === null) {
+    document.getElementById('view-advertising').innerHTML = `<h3>Advertising</h3><div class="card"><div class="empty">Loading...</div></div>`;
+    return;
+  }
+  if (AD_CHANNELS.error) {
+    document.getElementById('view-advertising').innerHTML = `<h3>Advertising</h3><div class="card attn"><div class="empty" style="color:var(--danger);">Could not reach the worker: ${AD_CHANNELS.error}</div></div>`;
+    return;
+  }
+
+  const channels = AD_CHANNELS;
+  const signedCount = channels.filter(c => c.status === 'signed').length;
+  const inProgressCount = channels.filter(c => c.status === 'contacted' || c.status === 'in-progress').length;
+
+  const html = `
+    <h3>Advertising</h3>
+    <p class="lead">Every real channel worth contacting for the store — radio, the military base, billboard, Spanish-language TV, direct mail — with why it's worth reaching out and how to approach it. Not a performance dashboard (see Ad Performance for that) — this is the outreach list.</p>
+
+    <div style="display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap;">
+      <div class="badge info">${channels.length} channels</div>
+      <div class="badge warning">${inProgressCount} in progress</div>
+      <div class="badge success">${signedCount} signed</div>
+      <button class="btn ghost" onclick="AD_CHANNELS=null; renderAdvertising();">Refresh</button>
+    </div>
+
+    ${AD_CHANNEL_CATEGORY_ORDER.map(cat => {
+      const inCat = channels.filter(c => c.category === cat);
+      if (!inCat.length) return '';
+      return `
+        <div class="card" style="padding:0; margin-bottom:14px;">
+          <div class="card-head" style="padding:14px 16px 0;"><span class="card-title">${AD_CHANNEL_CATEGORY_LABEL[cat]}</span></div>
+          ${inCat.map(c => `
+            <div class="cust-row" style="cursor:default; flex-direction:column; align-items:stretch; border-top:1px solid var(--border); padding:14px 16px;">
+              <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px; flex-wrap:wrap;">
+                <div style="flex:1; min-width:220px;">
+                  <div class="cust-name">${c.name}</div>
+                  ${c.contact_name || c.phone || c.address ? `<div class="cust-meta">${[c.contact_name, c.phone, c.address].filter(Boolean).join(' &middot; ')}</div>` : ''}
+                </div>
+                <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
+                  ${adChannelStatusBadge(c.status)}
+                  <select onchange="setAdChannelStatus('${c.id}', this.value)">
+                    <option value="">Update status...</option>
+                    <option value="not-contacted" ${c.status === 'not-contacted' ? 'selected' : ''}>Not contacted</option>
+                    <option value="contacted" ${c.status === 'contacted' ? 'selected' : ''}>Contacted</option>
+                    <option value="in-progress" ${c.status === 'in-progress' ? 'selected' : ''}>In progress</option>
+                    <option value="declined" ${c.status === 'declined' ? 'selected' : ''}>Declined</option>
+                    <option value="signed" ${c.status === 'signed' ? 'selected' : ''}>Signed</option>
+                  </select>
+                </div>
+              </div>
+              <div style="margin-top:8px; font-size:12.5px; line-height:1.5;">
+                <div><b style="color:var(--ink);">Why contact:</b> <span style="color:var(--dim);">${c.why_contact}</span></div>
+                <div style="margin-top:4px;"><b style="color:var(--ink);">How to approach:</b> <span style="color:var(--dim);">${c.how_to_approach}</span></div>
+                <div style="margin-top:4px;"><b style="color:var(--ink);">Pricing:</b> <span style="color:var(--dim);">${c.pricing_note}</span>${!c.pricing_confirmed ? ' <span class="badge warning" style="font-size:10px;">estimate — confirm directly</span>' : ''}</div>
+              </div>
+              ${c.notes.length ? `
+                <div style="margin-top:8px; font-size:12px; color:var(--dim);">
+                  ${c.notes.map(n => `&middot; ${n.text} <span style="opacity:.7;">(${n.by}, ${daysSince(n.at)}d ago)</span>`).join('<br>')}
+                </div>
+              ` : ''}
+              <div style="margin-top:8px; display:flex; gap:6px;">
+                <input class="input" id="adc-note-${c.id}" placeholder="Add a note (e.g. 'called, left voicemail')" style="flex:1; font-size:12.5px;">
+                <button class="btn ghost" onclick="addAdChannelNoteUI('${c.id}')">Add</button>
+              </div>
+            </div>
+          `).join('')}
+        </div>
+      `;
+    }).join('')}
+  `;
+  document.getElementById('view-advertising').innerHTML = html;
+}
+
+async function setAdChannelStatus(id, status) {
+  if (!status) return;
+  try {
+    await api('/api/advertising-channels/' + id + '/status', { method: 'POST', body: JSON.stringify({ status: status }) });
+    AD_CHANNELS = null;
+    renderAdvertising();
+  } catch (e) {
+    alert(e.message || String(e));
+  }
+}
+
+async function addAdChannelNoteUI(id) {
+  const input = document.getElementById('adc-note-' + id);
+  const text = input && input.value.trim();
+  if (!text) return;
+  try {
+    await api('/api/advertising-channels/' + id + '/notes', { method: 'POST', body: JSON.stringify({ text: text }) });
+    AD_CHANNELS = null;
+    renderAdvertising();
+  } catch (e) {
+    alert(e.message || String(e));
+  }
+}
+
+/* -------- MANUAL -------- */
+// Real, in-progress documentation -- starts with the Advertising tab since
+// that's what this pass built. Not yet a full app manual; flagged as a
+// known gap, not silently skipped.
+function renderManual() {
+  const html = `
+    <h3>Manual</h3>
+    <p class="lead">How to use what's in the Cockpit. This is a work in progress -- the Advertising tab is documented below; the rest of the app doesn't have write-ups here yet.</p>
+
+    <div class="card">
+      <div class="card-head"><span class="card-title">Advertising</span></div>
+      <div style="font-size:13.5px; line-height:1.65; color:var(--dim);">
+        <p style="margin:0 0 10px;">A list of every real outbound advertising channel worth contacting for the store -- radio stations, the JBSA military base sponsorship program, billboard companies, Spanish-language TV, and direct mail. This is different from <b style="color:var(--ink);">Ad Performance</b>, which tracks real spend/results on Meta, Google, and TikTok ads already running -- Advertising is the outreach list for channels you haven't necessarily contacted yet.</p>
+        <p style="margin:0 0 10px;"><b style="color:var(--ink);">Each entry has:</b> who to contact (name/phone/address where known), <i>why</i> it's worth reaching out (the real reasoning -- audience match, reach, cost), <i>how</i> to approach them (the real next step), and a pricing note. A pricing note marked "estimate -- confirm directly" is a real market-average figure, not a quote from that specific company -- always get a real number before committing.</p>
+        <p style="margin:0 0 10px;"><b style="color:var(--ink);">Status</b> tracks where things stand with each channel: Not contacted &rarr; Contacted &rarr; In progress &rarr; Signed (or Declined if they pass). Change it from the dropdown on each card -- it saves immediately, no separate save button.</p>
+        <p style="margin:0;"><b style="color:var(--ink);">Notes</b> let you log anything worth remembering on a channel -- who you talked to, what they said, when to follow up. Type in the box under a card and hit Add; notes stack with the newest on top and show who added them and how long ago.</p>
+      </div>
+    </div>
+
+    <div class="card tight" style="background:var(--surface-soft); border-style:dashed; margin-top:14px; font-size:12px; color:var(--dim);">
+      More sections (Inventory, Invoices, Team, Money, etc.) aren't written up here yet -- this page grows as each part of the Cockpit gets documented, not all at once.
+    </div>
+  `;
+  document.getElementById('view-manual').innerHTML = html;
 }
 
 /* MORNING REPORT — printable / saveable HTML report of yesterday.
@@ -5716,6 +5890,7 @@ ROLE_LEGACY_PERMS.owner.push("inventory_write");
 ROLE_LEGACY_PERMS.owner.push("customers");
 ROLE_LEGACY_PERMS.owner.push("customers_email");
 ROLE_LEGACY_PERMS.owner.push("ads");
+ROLE_LEGACY_PERMS.owner.push("advertising");
 ROLE_LEGACY_PERMS.owner.push("team");
 ROLE_LEGACY_PERMS.owner.push("money");
 ROLE_LEGACY_PERMS.owner.push("reviews");
@@ -5726,6 +5901,7 @@ ROLE_LEGACY_PERMS["sales-lead"].push("inventory_write");
 ROLE_LEGACY_PERMS["sales-lead"].push("customers");
 ROLE_LEGACY_PERMS["sales-lead"].push("customers_email");
 ROLE_LEGACY_PERMS["sales-lead"].push("ads");
+ROLE_LEGACY_PERMS["sales-lead"].push("advertising");
 ROLE_LEGACY_PERMS["sales-lead"].push("reviews");
 ROLE_LEGACY_PERMS["showroom-associate"] = [];
 ROLE_LEGACY_PERMS["showroom-associate"].push("inbox_assigned");
@@ -5742,6 +5918,7 @@ ROLE_LEGACY_PERMS["read-only"] = [];
 ROLE_LEGACY_PERMS["read-only"].push("inbox_all");
 ROLE_LEGACY_PERMS["read-only"].push("inventory_read");
 ROLE_LEGACY_PERMS["read-only"].push("customers");
+ROLE_LEGACY_PERMS["read-only"].push("advertising");
 ROLE_LEGACY_PERMS["read-only"].push("money");
 ROLE_LEGACY_PERMS["read-only"].push("reviews");
 
