@@ -247,6 +247,7 @@ export interface User {
   name: string;
   role: Role;
   email?: string;
+  phone?: string; // E.164-ish WhatsApp-reachable number, for notifyWorker() (lib/notify.ts) -- optional, never guessed
   assigned_accounts?: string[]; // Marketplace/Page/IG account IDs
   custom_overrides?: { added: Atom[]; removed: Atom[] }; // grants/revokes on top of role template
   is_master: boolean; // owner-level (Ivan, Paul)

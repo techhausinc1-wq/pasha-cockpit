@@ -103,12 +103,15 @@ import {
   seedOrdersIfEmpty,
 } from "./lib/orders.ts";
 import {
+  assignDeliveryCrew,
   deliveriesByDate,
+  findDeliveryById,
   listDeliveries,
   scheduleDelivery,
   seedDeliveriesIfEmpty,
   updateDeliveryStatus,
 } from "./lib/deliveries.ts";
+import { notifyWorker } from "./lib/notify.ts";
 import { falConfigured, generateCaptions, PROMO_TAGS, startReel, advanceReel, startStitchJob, advanceStitchJob, startCustomVideo, startTextVideo } from "./lib/reels.ts";
 import { listProspects, logOutreach, runScoutSearch, saveProspect, seedScoutIfEmpty, updateProspect } from "./lib/scout.ts";
 import {
@@ -1145,6 +1148,30 @@ async function handleRequest(req: Request, env: Env): Promise<Response> {
     const notified = await notifyCustomerOfDelivery(delivery, "scheduled");
     return json({ delivery, customer_notified: notified });
   }
+  // ── real crew assignment + notification -- Cockpit plan Phase 4b.
+  // Sets assigned_user_id (not just the free-text crew display name) and
+  // actually tells the real person via notifyWorker() -- fails soft, same
+  // as notifyCustomerOfDelivery: a missing phone or send error never
+  // blocks the assignment write itself. ────────────────────────────────
+  if (path.match(/^\/api\/deliveries\/[^/]+\/assign$/) && req.method === "POST") {
+    if (!can("deliveries.write.schedule")) return json({ error: "forbidden", missing_atom: "deliveries.write.schedule" }, 403);
+    const id = path.split("/")[3];
+    let body: { user_id?: string };
+    try {
+      body = await req.json();
+    } catch {
+      return json({ error: "invalid_json" }, 400);
+    }
+    if (!body.user_id) return json({ error: "user_id_required" }, 400);
+    const assignee = await getUserById(body.user_id);
+    if (!assignee) return json({ error: "user_not_found" }, 404);
+    const delivery = await findDeliveryById(id);
+    if (!delivery) return json({ error: "delivery_not_found" }, 404);
+    const updated = await assignDeliveryCrew(id, body.user_id, assignee.name);
+    const message = `New delivery assigned: ${delivery.customer_name} · ${delivery.address_area} · ${delivery.scheduled_date} (${delivery.route_label}).`;
+    const notifyResult = await notifyWorker(body.user_id, message);
+    return json({ delivery: updated, worker_notified: notifyResult });
+  }
   if (path === "/api/deliveries/status" && req.method === "POST") {
     if (!can("deliveries.write.status")) return json({ error: "forbidden", missing_atom: "deliveries.write.status" }, 403);
     let body: { id?: string; status?: "scheduled" | "en-route" | "delivered" | "failed" };
@@ -1382,6 +1409,18 @@ async function handleRequest(req: Request, env: Env): Promise<Response> {
     return json(result, result.ok ? 200 : 502);
   }
 
+  // ── minimal roster for assignment pickers (delivery/job assign) --
+  // deliberately scoped to id/name/role only, no email/phone/pin, so a
+  // sales-lead who can assign deliveries (deliveries.write.schedule) but
+  // lacks full user-admin access (config.users) can still see who to
+  // assign to. ─────────────────────────────────────────────────────────
+  if (path === "/api/users/roster" && req.method === "GET") {
+    if (!can("config.users") && !can("deliveries.write.schedule")) {
+      return json({ error: "forbidden", missing_atom: "config.users" }, 403);
+    }
+    const all = await listUsers();
+    return json({ users: all.map((u) => ({ id: u.id, name: u.name, role: u.role, has_phone: Boolean(u.phone) })) });
+  }
   // ── team / users (PIN management) ───────────────────────────────────
   if (path === "/api/users" && req.method === "GET") {
     if (!can("config.users")) return json({ error: "forbidden", missing_atom: "config.users" }, 403);
@@ -1392,6 +1431,7 @@ async function handleRequest(req: Request, env: Env): Promise<Response> {
         name: u.name,
         role: u.role,
         email: u.email,
+        phone: u.phone,
         is_master: u.is_master,
         assigned_accounts: u.assigned_accounts || [],
         custom_overrides: u.custom_overrides,
@@ -1402,7 +1442,7 @@ async function handleRequest(req: Request, env: Env): Promise<Response> {
   // in-memory-only USERS fixture, which never persisted anything. ───────
   if (path === "/api/users" && req.method === "POST") {
     if (!can("config.users")) return json({ error: "forbidden", missing_atom: "config.users" }, 403);
-    let body: { name?: string; role?: string; email?: string; assigned_accounts?: string[] };
+    let body: { name?: string; role?: string; email?: string; phone?: string; assigned_accounts?: string[] };
     try {
       body = await req.json();
     } catch {
@@ -1412,6 +1452,7 @@ async function handleRequest(req: Request, env: Env): Promise<Response> {
       name: body.name || "",
       role: (body.role || "") as Role,
       email: body.email,
+      phone: body.phone,
       assigned_accounts: body.assigned_accounts,
     });
     if ("error" in result) return json(result, 400);

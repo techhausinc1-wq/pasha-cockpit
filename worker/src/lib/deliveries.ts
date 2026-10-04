@@ -15,7 +15,8 @@ export interface Delivery {
   address_area: string;
   scheduled_date: string; // YYYY-MM-DD
   route_label: string;
-  crew: string | null;
+  crew: string | null; // display name -- kept free-text since a crew can be more than one person
+  assigned_user_id: string | null; // real roster user id, set by assignDeliveryCrew() -- what notifyWorker() actually targets
   status: DeliveryStatus;
   notes: string | null;
   created_at: string;
@@ -34,6 +35,7 @@ export function seedDeliveries(): Delivery[] {
     scheduled_date: new Date(now + 3 * 86400000).toISOString().slice(0, 10),
     route_label: "Route A - Northeast",
     crew: "Manny & Deo",
+    assigned_user_id: null,
     status: "scheduled",
     notes: "2nd floor apt, no elevator -- confirm crew size before dispatch.",
     created_at: new Date(now - 20 * 60 * 1000).toISOString(),
@@ -77,6 +79,7 @@ export async function scheduleDelivery(input: {
     scheduled_date: input.scheduled_date,
     route_label: input.route_label,
     crew: input.crew ?? null,
+    assigned_user_id: null,
     status: "scheduled",
     notes: input.notes ?? null,
     created_at: now,
@@ -85,6 +88,20 @@ export async function scheduleDelivery(input: {
   };
   await kvSet(RES, delivery.id, delivery);
   return delivery;
+}
+
+// Real assignment -- Cockpit plan Phase 4b. Sets both the structured
+// assigned_user_id (what notifyWorker() in main.ts actually targets) and
+// the free-text crew display name, so existing read-only displays of
+// `crew` keep working without a template change.
+export async function assignDeliveryCrew(id: string, userId: string, userName: string): Promise<Delivery | null> {
+  const d = await findDeliveryById(id);
+  if (!d) return null;
+  d.assigned_user_id = userId;
+  d.crew = userName;
+  d.updated_at = new Date().toISOString();
+  await kvSet(RES, d.id, d);
+  return d;
 }
 
 export async function updateDeliveryStatus(id: string, status: DeliveryStatus): Promise<Delivery | null> {

@@ -5284,6 +5284,10 @@ function renderTeam() {
           <label class="field-lbl">Assigned accounts (comma-separated account IDs)</label>
           <input class="input" value="${(u.assigned_accounts || []).join(', ')}" onchange="patchRealUser('${u.id}', {assigned_accounts: this.value.split(',').map(s => s.trim()).filter(Boolean)})">
         </div>
+        <div class="field" style="margin-bottom:8px;">
+          <label class="field-lbl">WhatsApp phone (for delivery/job notifications)</label>
+          <input class="input" value="${u.phone || ''}" placeholder="+1 210..." onchange="patchRealUser('${u.id}', {phone: this.value.trim()})">
+        </div>
         <button class="btn sm ghost" onclick="resetRealUserPin('${u.id}', '${u.name.replace(/'/g, "")}')">Reset PIN</button>
       </div>
     `).join('')}
@@ -5295,6 +5299,7 @@ function renderTeam() {
         <select class="select" id="new-user-role">${REAL_ROLES.filter(r => r !== 'owner').map(r => `<option value="${r}">${r}</option>`).join('')}</select>
       </div>
       <div class="field"><label class="field-lbl">Email (optional)</label><input class="input" id="new-user-email" placeholder="optional"></div>
+      <div class="field"><label class="field-lbl">WhatsApp phone (optional, for delivery/job notifications)</label><input class="input" id="new-user-phone" placeholder="+1 210..."></div>
       <button class="btn primary" onclick="createRealUser()">Create real login</button>
       <div id="new-user-result" style="margin-top:10px; font-size:13px;"></div>
     </div>
@@ -5329,13 +5334,15 @@ async function createRealUser() {
   const name = document.getElementById('new-user-name').value.trim();
   const role = document.getElementById('new-user-role').value;
   const email = document.getElementById('new-user-email').value.trim();
+  const phone = document.getElementById('new-user-phone').value.trim();
   const resultEl = document.getElementById('new-user-result');
   if (!name) { resultEl.innerHTML = '<span style="color:var(--danger);">Name required.</span>'; return; }
   try {
-    const res = await api('/api/users', { method: 'POST', body: JSON.stringify({ name, role, email: email || undefined }) });
+    const res = await api('/api/users', { method: 'POST', body: JSON.stringify({ name, role, email: email || undefined, phone: phone || undefined }) });
     resultEl.innerHTML = '<b>' + res.user.name + '</b> created (' + res.user.id + '). PIN: <b style="font-family:var(--mono);">' + res.pin + '</b> -- write this down, it is not shown again.';
     document.getElementById('new-user-name').value = '';
     document.getElementById('new-user-email').value = '';
+    document.getElementById('new-user-phone').value = '';
     REAL_TEAM = null;
   } catch (e) {
     resultEl.innerHTML = '<span style="color:var(--danger);">' + e.message + '</span>';
@@ -5652,14 +5659,57 @@ function renderLive() {
     <div class="card">
       <div class="card-head"><span class="card-title">Deliveries</span><span class="card-extra">${LIVE_DATA.deliveries.length}</span></div>
       ${LIVE_DATA.deliveries.length === 0 ? '<div class="empty">Nothing scheduled.</div>' : LIVE_DATA.deliveries.map(d => `
-        <div class="row">
+        <div class="row" style="flex-direction:column; align-items:stretch; gap:6px;">
           <div style="flex:1;"><div class="lbl">${d.customer_name} — ${d.scheduled_date}</div>
           <div class="meta">${d.route_label} · ${d.crew || 'no crew assigned'} · ${d.status}</div></div>
+          ${renderDeliveryAssign(d)}
         </div>
       `).join('')}
     </div>
   `;
   document.getElementById('view-live').innerHTML = html;
+}
+
+// Assignment picker -- Cockpit plan Phase 4b. Uses the scoped
+// /api/users/roster (not the full /api/users, which a sales-lead can't
+// call) so anyone who can assign deliveries can also see who to assign to.
+let ASSIGN_ROSTER = null;
+async function loadAssignRoster() {
+  try { ASSIGN_ROSTER = (await api('/api/users/roster')).users; } catch (e) { ASSIGN_ROSTER = []; }
+  if (CURRENT_VIEW === 'live') renderLive();
+}
+function renderDeliveryAssign(d) {
+  if (ASSIGN_ROSTER === null) {
+    loadAssignRoster();
+    return `<div class="small" style="color:var(--dim);">Loading team roster...</div>`;
+  }
+  return `
+    <div style="display:flex; gap:6px; align-items:center;">
+      <select class="select" style="flex:1;" id="assign-select-${d.id}">
+        <option value="">Assign to...</option>
+        ${ASSIGN_ROSTER.map(u => `<option value="${u.id}" ${d.assigned_user_id === u.id ? 'selected' : ''}>${u.name}${u.has_phone ? '' : ' (no phone on file)'}</option>`).join('')}
+      </select>
+      <button class="btn sm primary" onclick="assignDelivery('${d.id}')">Assign & notify</button>
+    </div>
+  `;
+}
+async function assignDelivery(deliveryId) {
+  const sel = document.getElementById('assign-select-' + deliveryId);
+  const userId = sel ? sel.value : '';
+  if (!userId) { alert('Pick someone to assign this to.'); return; }
+  try {
+    const res = await api('/api/deliveries/' + deliveryId + '/assign', { method: 'POST', body: JSON.stringify({ user_id: userId }) });
+    if (res.worker_notified && res.worker_notified.ok) {
+      alert('Assigned and notified over WhatsApp.');
+    } else {
+      const reason = res.worker_notified ? res.worker_notified.reason : 'unknown';
+      alert('Assigned, but the WhatsApp notification did not go out (' + reason + '). Tell them directly for now.');
+    }
+    LIVE_DATA.deliveries = null;
+    refreshLiveData();
+  } catch (e) {
+    alert('Could not assign: ' + (e.message || e));
+  }
 }
 
 /* ============================================================

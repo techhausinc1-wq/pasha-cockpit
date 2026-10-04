@@ -110,6 +110,7 @@ export interface CreateUserInput {
   name: string;
   role: Role;
   email?: string;
+  phone?: string;
   assigned_accounts?: string[];
 }
 
@@ -117,6 +118,7 @@ export interface UpdateUserInput {
   name?: string;
   role?: Role;
   email?: string;
+  phone?: string;
   assigned_accounts?: string[];
   custom_overrides?: { added: Atom[]; removed: Atom[] };
 }
@@ -144,6 +146,7 @@ export async function createUser(input: CreateUserInput): Promise<{ user: User }
     name,
     role: input.role,
     email: input.email,
+    phone: input.phone,
     assigned_accounts: input.assigned_accounts || [],
     is_master: false,
     pin: randomPin(),
@@ -169,6 +172,7 @@ export async function updateUser(id: string, input: UpdateUserInput): Promise<{ 
     name: input.name !== undefined ? input.name : u.name,
     role: input.role !== undefined ? input.role : u.role,
     email: input.email !== undefined ? input.email : u.email,
+    phone: input.phone !== undefined ? input.phone : u.phone,
     assigned_accounts: input.assigned_accounts !== undefined ? input.assigned_accounts : u.assigned_accounts,
     custom_overrides: input.custom_overrides !== undefined ? input.custom_overrides : u.custom_overrides,
   };
