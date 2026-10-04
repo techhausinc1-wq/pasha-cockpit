@@ -29,6 +29,8 @@ const LENDER_DOMAINS = [
   "koalafi.com",
   "progleasing.com", // Progressive Leasing
   "kafene.com",
+  "uown.co", // Uown -- best-guess domain, UNVERIFIED, confirm against a real email before trusting this count
+  "acimacredit.com", // Acima -- best-guess domain, UNVERIFIED, confirm against a real email before trusting this count
 ];
 
 export function gmailConfigured(): boolean {

@@ -1770,6 +1770,18 @@ const INVOICES = [
   { id: 'INV-2026-0883', date: '2026-06-04', customer: 'Janelle Wright', cust_id: 'c03', total: 799, items: [{sku:'MATT-K-PT',name:'King Pillow-Top · Plush',qty:1,price:799}], method: 'finance_af', status: 'finance', source: 'digital', signed: true, deliv_addr: '231 Hwy 87 N, Boerne 78006', salesperson: 'christian' },
 ];
 
+// NOTE 2026-10-01: the top-of-Ads-tab platform cards now pull real data
+// from /api/ads/insights (see loadAdsInsights/renderAdInsightCard below).
+// This ADS array -- and the per-account breakdown inside
+// openBudgetReport() -- is ONLY used by the "Full Budget Report" /
+// CSV-export feature further down this tab, which attributes
+// spend/messages/sales PER SOCIAL ACCOUNT. That's a materially bigger
+// problem than the top-level per-platform totals: it needs real access to
+// each of Pasha's actual FB/IG/TikTok accounts (blocked on Ivan granting
+// real PC/account access -- see the Cockpit plan's Decision F/G) before it
+// can be real. Left as clearly-labeled placeholder data (see the banner
+// inside openBudgetReport()) rather than silently removed, since the
+// report format itself is still useful once real per-account data exists.
 const ADS = [
   { channel: 'Facebook Ads', spend: 4200, revenue: 18400, leads: 142, attributed_sales: 18, color: '#1877f2' },
   { channel: 'Instagram Ads', spend: 1800, revenue: 7200, leads: 58, attributed_sales: 7, color: '#c2255c' },
@@ -2105,8 +2117,11 @@ function renderInbox() {
   const queuedCount = THREADS.filter(t => t.intent === 'auto_queued').length;
   const followupCount = THREADS.filter(t => t.intent === 'auto_followup').length;
   const html = `
-    <h3>${t('nav_inbox')}</h3>
+    <h3>${t('nav_inbox')} <span class="badge warning">Sample data</span></h3>
     <p class="lead">${unreadCount === 0 ? t('inbox_quiet') : `<b>${unreadCount}</b> ${t('inbox_busy_msgs')} · ${ACCOUNTS.length} ${t('all_accounts').toLowerCase()}`}</p>
+    <div class="card" style="margin-bottom:12px; font-size:12px; line-height:1.5;">
+      Preview of the full multi-account inbox once real account access is connected (see Operations tab for what's live today). Nothing sent here reaches a real customer. For a real WhatsApp conversation, use <b>Operations &rarr; All messages &rarr; Reply</b>.
+    </div>
 
     ${queuedCount > 0 || followupCount > 0 ? `
     <div class="card attn" style="border-left:3px solid var(--accent); background: linear-gradient(180deg, var(--accent-soft), var(--surface) 70%);">
@@ -2218,8 +2233,10 @@ function openThread(id) {
       <textarea class="textarea" id="reply-body">${generateDraftReply(th)}</textarea>
       <div style="font-size:10px; color:var(--dim); margin-top:4px; font-family:var(--mono);">${t('composer_note')}</div>
     </div>
+    <div class="card attn" style="margin-bottom:12px; font-size:11px; line-height:1.4;">
+      This is a sample thread (preview of the full multi-account inbox, pending real account access) -- it doesn't send anywhere real. For a real WhatsApp thread you can actually reply to, use Operations &rarr; All messages &rarr; Reply.
+    </div>
     <div style="display:flex; gap:8px;">
-      <button class="btn primary" onclick="alert('Sent (demo)'); closeModal();">${t('send')}</button>
       ${!th.assigned ? `<button class="btn ghost" onclick="th.assigned='${CURRENT_USER.id}'; closeModal(); renderInbox();">${t('assign_me')}</button>` : ''}
       <button class="btn ghost" onclick="closeModal()">${t('cancel')}</button>
     </div>
@@ -3573,55 +3590,70 @@ Thanks for being a 210 Discount Furniture customer.
 /* ============================================================
    ADS VIEW — channel attribution + new channel research
    ============================================================ */
+// Real ad-platform insights (Meta/Google/TikTok) -- replaces the old ADS
+// fixture that showed fabricated spend/revenue numbers unconditionally.
+// Same lazy-load + re-render pattern as loadMetaStatus()/metaStatus.
+let adsInsights = null;
+async function loadAdsInsights() {
+  try { adsInsights = await api('/api/ads/insights'); }
+  catch (e) { adsInsights = { error: e.message || String(e) }; }
+}
+function renderAdInsightCard(label, color, insight) {
+  if (!insight || !insight.configured) {
+    return `
+      <div class="card">
+        <div class="card-head"><span class="card-title">${label}</span><span class="badge warning">Not configured</span></div>
+        <div class="empty">${insight && insight.message ? insight.message : 'Not configured on this deployment.'}</div>
+      </div>
+    `;
+  }
+  if (!insight.ok) {
+    return `
+      <div class="card attn">
+        <div class="card-head"><span class="card-title">${label}</span><span class="badge danger">Error</span></div>
+        <div class="empty" style="color:var(--danger);">${insight.message}</div>
+      </div>
+    `;
+  }
+  const roas = insight.spend > 0 ? (insight.conversions ? '' : '') : '';
+  return `
+    <div class="card">
+      <div class="card-head"><span class="card-title">${label}</span><span class="badge success">Live</span></div>
+      <div class="row"><span class="lbl">Spend</span><span class="val">$${(insight.spend || 0).toLocaleString()}</span></div>
+      <div class="row"><span class="lbl">Impressions</span><span class="val">${(insight.impressions || 0).toLocaleString()}</span></div>
+      <div class="row"><span class="lbl">Clicks</span><span class="val">${(insight.clicks || 0).toLocaleString()}</span></div>
+      <div class="row"><span class="lbl">Conversions</span><span class="val">${(insight.conversions || 0).toLocaleString()}</span></div>
+    </div>
+  `;
+}
+
 function renderAds() {
   if (!userCanSee('ads')) {
     document.getElementById('view-ads').innerHTML = `<div class="empty">${t('permissions')} — needs <code>ads</code></div>`;
     return;
   }
-  const maxRev = Math.max(...ADS.map(a => a.revenue));
-  const totalSpend = ADS.reduce((s, a) => s + a.spend, 0);
-  const totalRev = ADS.reduce((s, a) => s + a.revenue, 0);
-  const blendedRoas = totalSpend > 0 ? (totalRev / totalSpend).toFixed(1) : '∞';
+  if (adsInsights === null) {
+    loadAdsInsights().then(function() { if (CURRENT_VIEW === 'ads') renderAds(); });
+  }
 
   const html = `
     <h3>${t('ads_dashboard')}</h3>
-    <p class="lead">Total ${t('spend').toLowerCase()}: <b>$${totalSpend.toLocaleString()}</b> · ${t('revenue')}: <b>$${totalRev.toLocaleString()}</b> · Blended ROAS: <b>${blendedRoas}×</b></p>
+    <p class="lead">Real spend/impressions/clicks/conversions pulled directly from each platform's own ads API -- not estimated. A platform shows "Not configured" until its real access token is set, never a fabricated number.</p>
 
     <div style="display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap;">
+      <button class="btn ghost" onclick="adsInsights=null; renderAds();">Refresh</button>
       <button class="btn primary" onclick="openBudgetReport()">Generate full budget report</button>
       <button class="btn ghost" onclick="downloadFinancialsCSV()">Download financials · CSV</button>
     </div>
 
-    <div class="card">
-      <div class="card-head">
-        <span class="card-title">${t('revenue')} por canal</span>
-      </div>
-      ${ADS.map(a => `
-        <div class="bar-row">
-          <div class="bar-label">
-            ${a.channel}
-            <div style="font-size:10px; color:var(--dim); font-weight:400; margin-top:2px;">$${a.spend.toLocaleString()} → $${a.revenue.toLocaleString()}</div>
-          </div>
-          <div class="bar-track">
-            <div class="bar-fill" style="width:${(a.revenue/maxRev)*100}%; background:${a.color};"></div>
-          </div>
-          <div class="bar-roas">${a.spend > 0 ? (a.revenue/a.spend).toFixed(1) + '×' : '∞×'}</div>
-        </div>
-      `).join('')}
-    </div>
-
-    <div class="grid-2">
-      <div class="card good">
-        <div class="card-title">Best ROAS</div>
-        <div style="font-family:var(--serif); font-size:24px; font-weight:500; margin-top:8px;">Google Business</div>
-        <div style="font-size:12px; color:var(--dim); margin-top:4px;">$0 spent · $5,400 attributed · respond to every review to keep it on top</div>
-      </div>
-      <div class="card attn">
-        <div class="card-title">Worst ROAS</div>
-        <div style="font-family:var(--serif); font-size:24px; font-weight:500; margin-top:8px;">TikTok Ads</div>
-        <div style="font-size:12px; color:var(--dim); margin-top:4px;">$900 spent · $1,800 attributed (2×) · revise creative or pause</div>
-      </div>
-    </div>
+    ${adsInsights === null ? '<div class="card"><div class="empty">Loading real ad data...</div></div>' :
+      adsInsights.error ? `<div class="card attn"><div class="empty" style="color:var(--danger);">Could not reach the worker: ${adsInsights.error}</div></div>` :
+      `<div class="grid-2">
+        ${renderAdInsightCard('Meta Ads (Facebook/Instagram)', '#1877f2', adsInsights.meta)}
+        ${renderAdInsightCard('Google Ads', '#4285f4', adsInsights.google)}
+        ${renderAdInsightCard('TikTok Ads', '#14747a', adsInsights.tiktok)}
+      </div>`
+    }
 
     <div class="divider"></div>
 
@@ -3877,6 +3909,10 @@ function openBudgetReport() {
         <div style="font-size:11px; color:var(--dim); margin-top:2px;">Last 30 days · ${formatDate(TODAY)}</div>
       </div>
       <button class="modal-close" onclick="closeModal()">&times;</button>
+    </div>
+
+    <div class="card attn" style="margin-bottom:14px; font-size:12px; line-height:1.5;">
+      <b>Placeholder data below.</b> The per-platform totals and real spend/impressions/clicks for Meta/Google/TikTok are live on the Ads tab itself. This per-account breakdown and team/cash summary need real access to each of Pasha's actual social accounts to be real -- not yet granted. Treat the numbers in this report as illustrative of the format, not actual figures, until that access exists.
     </div>
 
     <div class="grid-4" style="margin-bottom:14px;">
@@ -4928,50 +4964,115 @@ function sampleScript(theme) {
 /* ============================================================
    TEAM VIEW — user management + per-platform permissions
    ============================================================ */
+// Real roster -- Phase 2. Replaces the old USERS fixture (which only ever
+// mutated in-memory, never persisted, and used a completely different id
+// scheme -- pasha/ivan/christian -- than the real backend's u_* ids).
+// GET/POST/PATCH /api/users are real, KV-backed, atom-validated routes
+// (see lib/auth.ts createUser/updateUser). Real roles only -- the Role
+// union in rbac.ts -- not the old legacy perm-string checkboxes.
+const REAL_ROLES = ['owner', 'sales-lead', 'showroom-associate', 'bookkeeper', 'delivery-driver', 'read-only'];
+let REAL_TEAM = null;
+let REAL_TEAM_ERROR = null;
+async function loadRealTeam() {
+  try { REAL_TEAM = (await api('/api/users')).users; REAL_TEAM_ERROR = null; }
+  catch (e) { REAL_TEAM = null; REAL_TEAM_ERROR = e.message; }
+}
 function renderTeam() {
   if (!userCanSee('team')) {
     document.getElementById('view-team').innerHTML = `<div class="empty">${t('permissions')} — needs <code>team</code></div>`;
     return;
   }
-  const allPerms = ['inbox_all','inbox_assigned','inventory_read','inventory_write','customers','customers_email','ads','team','money','reviews'];
+  if (REAL_TEAM === null && REAL_TEAM_ERROR === null) {
+    loadRealTeam().then(renderTeam);
+    document.getElementById('view-team').innerHTML = `<h3>${t('team_management')}</h3><div class="card"><div class="empty">Loading real roster...</div></div>`;
+    return;
+  }
+  if (REAL_TEAM_ERROR) {
+    document.getElementById('view-team').innerHTML = `
+      <h3>${t('team_management')}</h3>
+      <div class="card attn"><div class="empty" style="color:var(--danger);">Could not load roster: ${REAL_TEAM_ERROR}</div></div>
+      <button class="btn ghost" onclick="REAL_TEAM_ERROR=null; renderTeam();">Retry</button>
+    `;
+    return;
+  }
   const html = `
     <h3>${t('team_management')}</h3>
-    <p class="lead">${t('team_intro')}</p>
+    <p class="lead">Real roster, backed by the login system -- changes here actually change who can log in and what they can do.</p>
 
-    ${USERS.map(u => `
+    ${REAL_TEAM.map(u => `
       <div class="card">
-        <div style="display:flex; align-items:center; gap:14px; margin-bottom:12px;">
-          <div class="cust-avatar" style="width:42px; height:42px; font-size:16px;">${u.avatar}</div>
-          <div style="flex:1;">
-            <div style="font-weight:600; font-size:15px;">${u.name}</div>
-            <div style="font-size:11px; color:var(--dim); font-family:var(--mono); text-transform:uppercase; letter-spacing:1px;">${u.role}</div>
+        <div style="display:flex; align-items:center; gap:14px; margin-bottom:12px; flex-wrap:wrap;">
+          <div class="cust-avatar" style="width:42px; height:42px; font-size:16px;">${u.name.charAt(0)}</div>
+          <div style="flex:1; min-width:140px;">
+            <div style="font-weight:600; font-size:15px;">${u.name}${u.is_master ? ' <span class="badge primary">master</span>' : ''}</div>
+            <div style="font-size:11px; color:var(--dim); font-family:var(--mono);">${u.id}${u.email ? ' · ' + u.email : ''}</div>
           </div>
-          <span class="badge primary">${u.perms.length} ${t('permissions').toLowerCase()}</span>
+          ${u.is_master ? `<span class="badge">${u.role}</span>` : `
+            <select class="select" style="width:auto;" onchange="patchRealUser('${u.id}', {role:this.value})">
+              ${REAL_ROLES.map(r => `<option value="${r}" ${u.role === r ? 'selected' : ''}>${r}</option>`).join('')}
+            </select>
+          `}
         </div>
-        <div class="perm-grid">
-          ${allPerms.map(p => {
-            const on = u.perms.includes(p);
-            const isOwnerExclusive = (p === 'team' || p === 'money');
-            const editable = u.id !== CURRENT_USER.id && !(isOwnerExclusive && CURRENT_USER.role !== 'owner');
-            return `<div class="perm-tag ${on ? 'on' : ''}" ${editable ? `onclick="togglePerm('${u.id}','${p}')"` : 'style="opacity:0.6;cursor:not-allowed;"'}><span class="chk"></span>${t('perm_' + p) || p}</div>`;
-          }).join('')}
+        <div class="field" style="margin-bottom:8px;">
+          <label class="field-lbl">Assigned accounts (comma-separated account IDs)</label>
+          <input class="input" value="${(u.assigned_accounts || []).join(', ')}" onchange="patchRealUser('${u.id}', {assigned_accounts: this.value.split(',').map(s => s.trim()).filter(Boolean)})">
         </div>
+        <button class="btn sm ghost" onclick="resetRealUserPin('${u.id}', '${u.name.replace(/'/g, "")}')">Reset PIN</button>
       </div>
     `).join('')}
 
     <div class="card" style="background:var(--surface-soft); border-style:dashed;">
+      <div class="card-title" style="margin-bottom:10px;">Add team member</div>
+      <div class="field"><label class="field-lbl">Name</label><input class="input" id="new-user-name" placeholder="e.g. Christian"></div>
+      <div class="field"><label class="field-lbl">Role</label>
+        <select class="select" id="new-user-role">${REAL_ROLES.filter(r => r !== 'owner').map(r => `<option value="${r}">${r}</option>`).join('')}</select>
+      </div>
+      <div class="field"><label class="field-lbl">Email (optional)</label><input class="input" id="new-user-email" placeholder="optional"></div>
+      <button class="btn primary" onclick="createRealUser()">Create real login</button>
+      <div id="new-user-result" style="margin-top:10px; font-size:13px;"></div>
+    </div>
+
+    <div class="card" style="background:var(--surface-soft); border-style:dashed;">
       <div style="font-family:var(--label); font-weight:700; font-size:11px; text-transform:uppercase; letter-spacing:1px; color:var(--dim); margin-bottom:6px;">How this works</div>
-      <div style="font-size:13px; line-height:1.5;">The owner (Pavil) can adjust permissions for any user. The admin (Ivan) can adjust everyone except the owner. Everyone else can't see this screen. Each permission controls which modules a user can view and which actions they can take.</div>
+      <div style="font-size:13px; line-height:1.5;">Role controls what a user can see and do everywhere in the app (server-enforced on every request, not just hidden in the UI). Assigned accounts control which message threads they can reply to. PINs are 4 digits and shown once, right after creation or reset -- write it down, it's not shown again.</div>
     </div>
   `;
   document.getElementById('view-team').innerHTML = html;
 }
-
-function togglePerm(uid, perm) {
-  const u = USERS.find(x => x.id === uid);
-  if (u.perms.includes(perm)) u.perms = u.perms.filter(p => p !== perm);
-  else u.perms.push(perm);
-  renderTeam();
+async function patchRealUser(id, patch) {
+  try {
+    await api('/api/users/' + id, { method: 'PATCH', body: JSON.stringify(patch) });
+    REAL_TEAM = null;
+    renderTeam();
+  } catch (e) {
+    alert('Could not update: ' + e.message);
+  }
+}
+async function resetRealUserPin(id, name) {
+  const pin = String(Math.floor(1000 + Math.random() * 9000));
+  if (!confirm('Reset PIN for ' + name + ' to a new random 4-digit code?')) return;
+  try {
+    await api('/api/users/' + id + '/pin', { method: 'POST', body: JSON.stringify({ pin }) });
+    alert('New PIN for ' + name + ': ' + pin + '\n\nWrite this down now -- it is not shown again.');
+  } catch (e) {
+    alert('Could not reset PIN: ' + e.message);
+  }
+}
+async function createRealUser() {
+  const name = document.getElementById('new-user-name').value.trim();
+  const role = document.getElementById('new-user-role').value;
+  const email = document.getElementById('new-user-email').value.trim();
+  const resultEl = document.getElementById('new-user-result');
+  if (!name) { resultEl.innerHTML = '<span style="color:var(--danger);">Name required.</span>'; return; }
+  try {
+    const res = await api('/api/users', { method: 'POST', body: JSON.stringify({ name, role, email: email || undefined }) });
+    resultEl.innerHTML = '<b>' + res.user.name + '</b> created (' + res.user.id + '). PIN: <b style="font-family:var(--mono);">' + res.pin + '</b> -- write this down, it is not shown again.';
+    document.getElementById('new-user-name').value = '';
+    document.getElementById('new-user-email').value = '';
+    REAL_TEAM = null;
+  } catch (e) {
+    resultEl.innerHTML = '<span style="color:var(--danger);">' + e.message + '</span>';
+  }
 }
 
 /* ============================================================
@@ -4992,7 +5093,7 @@ function saveLiveConfig(apiBase) {
   renderLive();
 }
 let liveAutoLoaded = false;
-let LIVE_DATA = { customers: null, orders: null, deliveries: null, threads: null, dashboard: null, ap: null, tax: null, financingApps: null, lenders: null, error: null, loading: false };
+let LIVE_DATA = { customers: null, orders: null, deliveries: null, threads: null, dashboard: null, ap: null, tax: null, financingApps: null, lenders: null, financingTally: null, error: null, loading: false };
 
 // Facebook/Instagram OAuth connect entry point (item 5) -- see
 // worker/src/lib/meta-oauth.ts. One click sends Pasha to Facebooks own
@@ -5032,7 +5133,7 @@ async function refreshLiveData() {
   if (CURRENT_VIEW === 'live') renderLive();
   if (CURRENT_VIEW === 'morning') renderMorning();
   try {
-    const [customers, orders, deliveries, threads, dashboard, ap, tax, financingApps, lenders] = await Promise.all([
+    const [customers, orders, deliveries, threads, dashboard, ap, tax, financingApps, lenders, financingTally] = await Promise.all([
       liveFetch('/api/customers'),
       liveFetch('/api/orders'),
       liveFetch('/api/deliveries'),
@@ -5042,6 +5143,7 @@ async function refreshLiveData() {
       userCanSee('money') ? liveFetch('/api/money/tax') : Promise.resolve({ obligations: [] }),
       userCanSee('money') ? liveFetch('/api/financing/applications') : Promise.resolve({ applications: [] }),
       userCanSee('money') ? liveFetch('/api/financing/lenders') : Promise.resolve({ lenders: [] }),
+      userCanSee('money') ? liveFetch('/api/financing/email-tally').catch(() => ({ configured: false, count_today: 0, by_lender: {} })) : Promise.resolve({ configured: false, count_today: 0, by_lender: {} }),
     ]);
     LIVE_DATA.customers = customers.customers;
     LIVE_DATA.orders = orders.orders;
@@ -5053,6 +5155,7 @@ async function refreshLiveData() {
     LIVE_DATA.tax = tax.obligations || [];
     LIVE_DATA.financingApps = financingApps.applications || [];
     LIVE_DATA.lenders = lenders.lenders || [];
+    LIVE_DATA.financingTally = financingTally;
   } catch (err) {
     LIVE_DATA.error = err.message;
   }
@@ -5066,6 +5169,65 @@ async function refreshLiveData() {
 // step) and uploads the moment a photo is taken, then refreshes so the
 // message-handler leaderboard reflects it. No photo needed at all is also
 // supported (markWonNoPhoto) for a desktop/no-camera fallback.
+// Real reply to a real thread -- POST /api/threads/:id/reply, backed by
+// lib/whatsapp.ts's real sendWhatsAppText for "wa" surface threads. Other
+// surfaces (mp/pg/ig) get an honest "not connected" message instead of a
+// fake success, per lib/meta-messaging.ts having no outbound-send function
+// yet (Meta App Review pending). Draft text comes from the real /api/draft-reply
+// endpoint (Anthropic-backed), not a hardcoded template.
+async function openRealThreadReply(threadId) {
+  const thread = (LIVE_DATA.allThreads || []).find(t => t.id === threadId);
+  if (!thread) return;
+  openModal(`
+    <div class="modal-head">
+      <div>
+        <div style="font-weight:600; font-size:16px;">${thread.customer_name}</div>
+        <div style="font-size:11px; color:var(--dim); margin-top:2px;">${thread.account_label} · ${thread.surface}</div>
+      </div>
+      <button class="modal-close" onclick="closeModal()">&times;</button>
+    </div>
+    <div class="card" style="background:var(--surface-soft); margin-bottom:14px;">
+      <div style="font-size:14px; line-height:1.5;">${thread.preview}</div>
+    </div>
+    <div class="field">
+      <label class="field-lbl">Reply</label>
+      <textarea class="textarea" id="real-reply-body" placeholder="Loading real AI draft...">Loading...</textarea>
+    </div>
+    <div id="real-reply-status" style="font-size:11px; color:var(--dim); margin-bottom:8px;"></div>
+    <div style="display:flex; gap:8px;">
+      <button class="btn primary" id="real-reply-send-btn" onclick="sendRealThreadReply('${thread.id}', '${thread.surface}')">${t('send')}</button>
+      <button class="btn ghost" onclick="closeModal()">${t('cancel')}</button>
+    </div>
+  `);
+  if (thread.surface !== 'wa') {
+    document.getElementById('real-reply-status').innerHTML = 'This surface (' + thread.surface + ') has no real send capability connected yet -- WhatsApp is the only live outbound channel today.';
+    document.getElementById('real-reply-send-btn').disabled = true;
+  }
+  try {
+    const draft = await api('/api/draft-reply', { method: 'POST', body: JSON.stringify({ thread_id: thread.id, latest_message: thread.preview }) });
+    const ta = document.getElementById('real-reply-body');
+    if (ta) ta.value = draft.draft_reply || '';
+  } catch (err) {
+    const ta = document.getElementById('real-reply-body');
+    if (ta) { ta.value = ''; ta.placeholder = 'Could not load AI draft (' + err.message + ') -- type a reply manually.'; }
+  }
+}
+async function sendRealThreadReply(threadId, surface) {
+  if (surface !== 'wa') return;
+  const body = document.getElementById('real-reply-body').value;
+  if (!body.trim()) return;
+  const btn = document.getElementById('real-reply-send-btn');
+  btn.disabled = true; btn.textContent = 'Sending...';
+  try {
+    await api('/api/threads/' + threadId + '/reply', { method: 'POST', body: JSON.stringify({ text: body }) });
+    closeModal();
+    await refreshLiveData();
+  } catch (err) {
+    document.getElementById('real-reply-status').innerHTML = '<span style="color:var(--danger);">Send failed: ' + err.message + '</span>';
+    btn.disabled = false; btn.textContent = t('send');
+  }
+}
+
 function markWonWithReceipt(threadId) {
   const input = document.createElement('input');
   input.type = 'file';
@@ -5177,10 +5339,13 @@ function renderLive() {
       ${(LIVE_DATA.allThreads || []).length === 0 ? '<div class="empty">No messages yet.</div>' : (LIVE_DATA.allThreads || []).map(t => `
         <div class="row">
           <div style="flex:1;">
-            <div class="lbl">${t.customer_name} <span class="badge ${t.status === 'won' ? 'success' : ''}">${t.status}</span></div>
+            <div class="lbl">${t.customer_name} <span class="badge ${t.status === 'won' ? 'success' : ''}">${t.status}</span> <span class="badge">${t.surface}</span></div>
             <div class="meta">${t.account_label} · ${t.preview}</div>
           </div>
-          ${t.status === 'won' ? '' : `<button class="btn sm primary" onclick="markWonWithReceipt('${t.id}')">Upload receipt</button>`}
+          <div style="display:flex; gap:6px;">
+            <button class="btn sm ghost" onclick="openRealThreadReply('${t.id}')">Reply</button>
+            ${t.status === 'won' ? '' : `<button class="btn sm primary" onclick="markWonWithReceipt('${t.id}')">Upload receipt</button>`}
+          </div>
         </div>
       `).join('')}
     </div>
@@ -5279,6 +5444,28 @@ function renderAlerts() {
 /* ============================================================
    MONEY VIEW — owner-only: cash position, AP, tax, financing waterfall
    ============================================================ */
+// Real count of lender confirmation EMAILS received today (not approval
+// decisions -- those live outside this app on each lender's own portal).
+// Deliberately labeled this way in the UI to avoid the exact "looks like
+// a real decision, isn't" trap the Ads tab fixture had.
+function renderFinancingTally() {
+  const tally = LIVE_DATA.financingTally;
+  if (!tally) return '<div class="empty">Loading...</div>';
+  if (!tally.configured) {
+    return '<div class="empty">Not connected yet -- see docs/GMAIL-READ-SETUP.md to enable.</div>';
+  }
+  if (tally.error) {
+    return `<div class="empty" style="color:var(--danger);">Could not read inbox: ${tally.error}</div>`;
+  }
+  const byLender = Object.entries(tally.by_lender || {}).filter(([, n]) => n > 0);
+  return `
+    <div class="row"><span class="lbl">Total today</span><span class="val">${tally.count_today}</span></div>
+    ${byLender.length === 0 ? '<div class="meta" style="margin-top:4px;">No lender emails yet today.</div>' : byLender.map(([domain, n]) => `
+      <div class="row"><span class="lbl" style="font-family:var(--mono); font-size:11px;">${domain}</span><span class="val">${n}</span></div>
+    `).join('')}
+  `;
+}
+
 function renderMoney() {
   if (!userCanSee('money')) {
     document.getElementById('view-money').innerHTML = '<div class="empty">Not available for this account.</div>';
@@ -5344,6 +5531,11 @@ function renderMoney() {
     <div class="card-head" style="margin-bottom:6px;"><span class="card-title">${t('money_lenders')}</span></div>
     <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:14px;">
       ${lenders.map(l => `<span class="badge ${l.configured ? 'success' : 'warning'}">${l.name} &middot; ${l.configured ? t('money_lender_configured') : t('money_lender_not_configured')}</span>`).join('')}
+    </div>
+
+    <div class="card-head" style="margin-bottom:6px;"><span class="card-title">Financing emails received today</span></div>
+    <div class="card" style="margin-bottom:14px;">
+      ${renderFinancingTally()}
     </div>
 
     <div class="card-head" style="margin-bottom:6px;"><span class="card-title">${t('money_financing')}</span></div>

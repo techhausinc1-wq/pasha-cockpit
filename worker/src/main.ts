@@ -18,16 +18,22 @@
 import {
   type Atom,
   effectiveAtoms,
+  type Role,
   SHELL_USERS,
 } from "./lib/rbac.ts";
 import {
   bearerToken,
+  checkLoginLockout,
+  clearLoginAttempts,
   createSession,
+  createUser,
   deleteSession,
   getUserById,
   listUsers,
+  recordFailedLogin,
   seedUsersIfEmpty,
   setUserPin,
+  updateUser,
   userFromToken,
   verifyPin,
 } from "./lib/auth.ts";
@@ -56,6 +62,7 @@ import {
   sendWhatsAppText,
   verifyWebhookSignature,
 } from "./lib/whatsapp.ts";
+import { countTodaysFinancingEmails } from "./lib/gmail.ts";
 import {
   type Customer,
   findCustomerById,
@@ -372,8 +379,16 @@ async function handleRequest(req: Request, env: Env): Promise<Response> {
     const userId = (body.userId || "").trim();
     const pin = (body.pin || "").trim();
     if (!userId || !pin) return bad("userId and pin required");
+    const lockout = await checkLoginLockout(userId);
+    if (lockout.locked) {
+      return json({ error: "too_many_attempts", retry_after_ms: lockout.retryAfterMs }, 429);
+    }
     const user = await verifyPin(userId, pin);
-    if (!user) return bad("Incorrect PIN", 401);
+    if (!user) {
+      await recordFailedLogin(userId);
+      return bad("Incorrect PIN", 401);
+    }
+    await clearLoginAttempts(userId);
     const token = await createSession(user.id);
     return json({
       token,
@@ -508,6 +523,46 @@ async function handleRequest(req: Request, env: Env): Promise<Response> {
     return json({ threads });
   }
 
+  // ── thread reply -- real send for a specific thread, replacing the old
+  // frontend demo button. Only the "wa" surface has a real outbound-send
+  // capability today (lib/whatsapp.ts); mp/pg/ig threads get an honest
+  // "not connected" response instead of a fake success -- see
+  // lib/meta-messaging.ts's comment on Meta App Review being pending. ────
+  if (path.match(/^\/api\/threads\/[^/]+\/reply$/) && req.method === "POST") {
+    if (!can("messages.send.assigned-accounts") && !can("messages.send.any-account")) {
+      return json({ error: "forbidden", missing_atom: "messages.send.assigned-accounts" }, 403);
+    }
+    const threadId = path.split("/")[3];
+    let body: { text?: string };
+    try {
+      body = await req.json();
+    } catch {
+      return json({ error: "invalid_json" }, 400);
+    }
+    if (!body.text || !body.text.trim()) return json({ error: "text_required" }, 400);
+    const threads = await listThreads();
+    const thread = threads.find((th) => th.id === threadId);
+    if (!thread) return json({ error: "thread_not_found" }, 404);
+    if (!can("messages.send.any-account") && thread.worker_id && thread.worker_id !== user.id) {
+      if (!(user.assigned_accounts || []).includes(thread.account_id)) {
+        return json({ error: "forbidden", missing_atom: "messages.send.assigned-accounts" }, 403);
+      }
+    }
+    if (thread.surface !== "wa") {
+      return json({
+        error: "surface_not_connected",
+        surface: thread.surface,
+        message: thread.surface === "pg" || thread.surface === "ig"
+          ? "Meta messaging is code-complete but not live yet -- Meta hasn't granted pages_messaging/instagram_manage_messages for this app."
+          : "This surface (" + thread.surface + ") has no real outbound-send API -- reply directly in the platform's own app for now.",
+      }, 400);
+    }
+    const result = await sendWhatsAppText(thread.customer_handle, body.text);
+    if (!result.ok) return json({ error: "send_failed", detail: result.error }, 502);
+    await markThreadSent(thread.customer_handle, body.text);
+    return json({ ok: true, message_id: result.message_id });
+  }
+
   // ── conversion proof -- mark a thread won, optionally with a photo of
   // the receipt (any payment method, not just financing). The photo goes
   // to the private RECEIPTS R2 bucket, never a public URL, since these
@@ -543,6 +598,20 @@ async function handleRequest(req: Request, env: Env): Promise<Response> {
     const obj = await (env.RECEIPTS as unknown as { get(key: string): Promise<{ body: ReadableStream; httpMetadata?: { contentType?: string } } | null> }).get(key);
     if (!obj) return json({ error: "not_found" }, 404);
     return new Response(obj.body, { headers: { "Content-Type": obj.httpMetadata?.contentType || "image/jpeg", ...CORS_HEADERS } });
+  }
+
+  // ── financing email tally -- real count of today's lender confirmation
+  // emails (lib/gmail.ts), already computed for the daily digest but never
+  // exposed as its own route before. This is "financing emails received,"
+  // NOT "approvals" -- it counts confirmation emails landing in the inbox
+  // per lender domain, which is a different thing from an actual lender
+  // decision. Keep that distinction in the UI label, not just here. ──────
+  if (path === "/api/financing/email-tally" && req.method === "GET") {
+    if (!can("financing.read.team-aggregate") && !can("financing.read.all-applications")) {
+      return json({ error: "forbidden", missing_atom: "financing.read.team-aggregate" }, 403);
+    }
+    const tally = await countTodaysFinancingEmails();
+    return json(tally);
   }
 
   // ── financing waterfall ──────────────────────────────────────────────
@@ -1211,7 +1280,56 @@ async function handleRequest(req: Request, env: Env): Promise<Response> {
   if (path === "/api/users" && req.method === "GET") {
     if (!can("config.users")) return json({ error: "forbidden", missing_atom: "config.users" }, 403);
     const all = await listUsers();
-    return json({ users: all.map((u) => ({ id: u.id, name: u.name, role: u.role, email: u.email, is_master: u.is_master })) });
+    return json({
+      users: all.map((u) => ({
+        id: u.id,
+        name: u.name,
+        role: u.role,
+        email: u.email,
+        is_master: u.is_master,
+        assigned_accounts: u.assigned_accounts || [],
+        custom_overrides: u.custom_overrides,
+      })),
+    });
+  }
+  // ── create a real user -- Phase 2. Replaces the old Team tab's
+  // in-memory-only USERS fixture, which never persisted anything. ───────
+  if (path === "/api/users" && req.method === "POST") {
+    if (!can("config.users")) return json({ error: "forbidden", missing_atom: "config.users" }, 403);
+    let body: { name?: string; role?: string; email?: string; assigned_accounts?: string[] };
+    try {
+      body = await req.json();
+    } catch {
+      return json({ error: "invalid_json" }, 400);
+    }
+    const result = await createUser({
+      name: body.name || "",
+      role: (body.role || "") as Role,
+      email: body.email,
+      assigned_accounts: body.assigned_accounts,
+    });
+    if ("error" in result) return json(result, 400);
+    const { pin: _pin, ...safe } = result.user;
+    return json({ user: safe, pin: result.user.pin });
+  }
+  // ── edit a real user's role/atoms/accounts -- Phase 2. Validates role
+  // against the real Role union and every atom against the real Atom
+  // union server-side, since that's the actual security boundary (this
+  // file's own header comment), not just a UI convenience. ──────────────
+  if (path.match(/^\/api\/users\/[^/]+$/) && req.method === "PATCH") {
+    if (!can("config.users")) return json({ error: "forbidden", missing_atom: "config.users" }, 403);
+    const id = path.split("/")[3];
+    let body: Record<string, unknown>;
+    try {
+      body = await req.json();
+    } catch {
+      return json({ error: "invalid_json" }, 400);
+    }
+    // deno-lint-ignore no-explicit-any
+    const result = await updateUser(id, body as any);
+    if ("error" in result) return json(result, result.error === "not_found" ? 404 : 400);
+    const { pin: _pin, ...safe } = result.user;
+    return json({ user: safe });
   }
   if (path.match(/^\/api\/users\/[^/]+\/pin$/) && req.method === "POST") {
     if (!can("config.users")) return json({ error: "forbidden", missing_atom: "config.users" }, 403);
