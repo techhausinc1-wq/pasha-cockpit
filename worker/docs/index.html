@@ -2291,27 +2291,62 @@ function openReviewReply(id) {
    INVENTORY VIEW — live stock, cross-pollinated from StockScout
    ============================================================ */
 let INV_FILTER = { cat: 'all', status: 'all' };
+// Real inventory -- GET /api/inventory joins the real 602-item catalog with
+// real per-slug qty_on_hand (lib/inventory.ts). Replaces the old 21-SKU
+// INVENTORY fixture (kept below only because EASY_ORDER/other legacy code
+// may still reference it incidentally -- not used by this view anymore).
+// Same lazy-load + re-render pattern as loadAdsInsights()/adsInsights.
+let REAL_INVENTORY = null;
+let REAL_INVENTORY_ERROR = null;
+async function loadInventory() {
+  try {
+    const res = await api('/api/inventory');
+    REAL_INVENTORY = res.items || [];
+    REAL_INVENTORY_ERROR = null;
+  } catch (e) {
+    REAL_INVENTORY = REAL_INVENTORY || [];
+    REAL_INVENTORY_ERROR = e.message || String(e);
+  }
+  if (CURRENT_VIEW === 'inventory') renderInventory();
+}
+function invStatus(i) {
+  if (!i.counted) return 'not_counted';
+  if (i.qty_on_hand <= 0) return 'out';
+  if (i.qty_on_hand <= 3) return 'low';
+  return 'in_stock';
+}
+const INV_STATUS_LABEL = { not_counted: 'Not yet counted', out: 'Out of stock', low: 'Low stock', in_stock: 'In stock' };
+const INV_STATUS_BADGE = { not_counted: '', out: 'danger', low: 'warning', in_stock: 'success' };
+
 function renderInventory() {
   if (!userCanSee('inventory_read')) {
     document.getElementById('view-inventory').innerHTML = `<div class="empty">${t('permissions')} — needs <code>inventory_read</code></div>`;
     return;
   }
-  let items = INVENTORY.slice();
-  if (INV_FILTER.cat !== 'all') items = items.filter(i => i.cat === INV_FILTER.cat);
-  if (INV_FILTER.status !== 'all') items = items.filter(i => i.status === INV_FILTER.status);
-  const cats = [...new Set(INVENTORY.map(i => i.cat))];
-  const totalValue = INVENTORY.reduce((s, i) => s + i.qty * i.price, 0);
-  const totalCost = INVENTORY.reduce((s, i) => s + i.qty * i.cost, 0);
+  if (REAL_INVENTORY === null) {
+    loadInventory();
+    document.getElementById('view-inventory').innerHTML = `<h3>${t('inventory')}</h3><div class="card"><div class="empty">Loading real inventory from the 602-item catalog...</div></div>`;
+    return;
+  }
+  if (REAL_INVENTORY_ERROR) {
+    document.getElementById('view-inventory').innerHTML = `<h3>${t('inventory')}</h3><div class="card attn"><div class="empty" style="color:var(--danger);">Could not reach the worker: ${REAL_INVENTORY_ERROR}</div></div>`;
+    return;
+  }
+  let items = REAL_INVENTORY.slice();
+  if (INV_FILTER.cat !== 'all') items = items.filter(i => i.category === INV_FILTER.cat);
+  if (INV_FILTER.status !== 'all') items = items.filter(i => invStatus(i) === INV_FILTER.status);
+  const cats = [...new Set(REAL_INVENTORY.map(i => i.category))].sort();
+  const countedCount = REAL_INVENTORY.filter(i => i.counted).length;
 
   const html = `
     <h3>${t('inventory')}</h3>
-    <p class="lead">${INVENTORY.length} SKUs · $${totalValue.toLocaleString()} ${t('revenue').toLowerCase()} potential · cost basis $${totalCost.toLocaleString()}</p>
+    <p class="lead">${REAL_INVENTORY.length} real SKUs from the store's own catalog · ${countedCount} counted so far, ${REAL_INVENTORY.length - countedCount} still "not yet counted." Numbers only become real once someone counts them -- nothing here is estimated.</p>
 
     <div class="grid-4" style="margin-bottom:14px;">
-      <div class="stat"><div class="stat-num">${INVENTORY.filter(i => i.status === 'available').length}</div><div class="stat-lbl">${t('status_available')}</div></div>
-      <div class="stat"><div class="stat-num" style="color:var(--warning);">${INVENTORY.filter(i => i.status === 'lowstock').length}</div><div class="stat-lbl">${t('status_lowstock')}</div></div>
-      <div class="stat"><div class="stat-num">${INVENTORY.filter(i => i.status === 'reserved').length}</div><div class="stat-lbl">${t('status_reserved')}</div></div>
-      <div class="stat"><div class="stat-num">${INVENTORY.filter(i => i.loc === 'warehouse').length}</div><div class="stat-lbl">${t('warehouse')}</div></div>
+      <div class="stat"><div class="stat-num" style="color:var(--success);">${REAL_INVENTORY.filter(i => invStatus(i) === 'in_stock').length}</div><div class="stat-lbl">${INV_STATUS_LABEL.in_stock}</div></div>
+      <div class="stat"><div class="stat-num" style="color:var(--warning);">${REAL_INVENTORY.filter(i => invStatus(i) === 'low').length}</div><div class="stat-lbl">${INV_STATUS_LABEL.low}</div></div>
+      <div class="stat"><div class="stat-num" style="color:var(--danger);">${REAL_INVENTORY.filter(i => invStatus(i) === 'out').length}</div><div class="stat-lbl">${INV_STATUS_LABEL.out}</div></div>
+      <div class="stat"><div class="stat-num">${REAL_INVENTORY.length - countedCount}</div><div class="stat-lbl">${INV_STATUS_LABEL.not_counted}</div></div>
     </div>
 
     <div class="scroll-x" style="margin-bottom:12px;">
@@ -2323,29 +2358,29 @@ function renderInventory() {
     <div class="scroll-x" style="margin-bottom:14px;">
       <div style="display:inline-block;">
         ${renderInvFilter('status', 'all', t('all_accounts'))}
-        ${['available','lowstock','reserved'].map(s => renderInvFilter('status', s, t('status_' + s))).join('')}
+        ${['in_stock','low','out','not_counted'].map(s => renderInvFilter('status', s, INV_STATUS_LABEL[s])).join('')}
       </div>
     </div>
 
     <div style="display:flex; flex-direction:column; gap:8px;">
       ${items.map(i => `
-        <div class="inv-item" onclick="openInvItem('${i.sku}')">
-          <div class="inv-thumb" style="background:${i.color};">${i.sku.slice(0,3)}</div>
+        <div class="inv-item" onclick="openInvItem('${i.slug}')">
+          <div class="inv-thumb" style="${i.photo ? `background-image:url('${i.photo}'); background-size:cover; background-position:center;` : `background:var(--border);`}">${i.photo ? '' : (i.sku || i.name).slice(0,3)}</div>
           <div class="inv-body">
             <div class="inv-name">${i.name}</div>
-            <div class="inv-sku">${i.sku} · ${i.cat}</div>
+            <div class="inv-sku">${i.sku || 'no sku'} · ${i.category}</div>
             <div class="inv-meta">
-              <span>${i.qty} ${t('in_stock').toLowerCase()}</span>
-              <span class="badge ${i.status === 'lowstock' ? 'warning' : i.status === 'reserved' ? 'info' : 'success'} dot">${t('status_' + i.status)}</span>
-              <span>${t(`showroom_${i.loc.replace('showroom_','').slice(0,1)}`) || t('warehouse')}</span>
+              <span>${i.qty_on_hand} ${t('in_stock').toLowerCase()}</span>
+              <span class="badge ${INV_STATUS_BADGE[invStatus(i)]} dot">${INV_STATUS_LABEL[invStatus(i)]}</span>
+              ${i.location ? `<span>${i.location}</span>` : ''}
             </div>
           </div>
           <div class="inv-price">
             $${i.price.toLocaleString()}
-            <span class="cost">cost $${i.cost}</span>
           </div>
         </div>
       `).join('')}
+      ${items.length === 0 ? `<div class="empty">No items match this filter.</div>` : ''}
     </div>
   `;
   document.getElementById('view-inventory').innerHTML = html;
@@ -2356,24 +2391,80 @@ function renderInvFilter(field, val, label) {
   return `<button class="pill-filter ${on ? 'on' : ''}" onclick="INV_FILTER.${field}='${val}'; renderInventory();">${label}</button>`;
 }
 
-function openInvItem(sku) {
-  const i = INVENTORY.find(x => x.sku === sku);
+function openInvItem(slug) {
+  const i = (REAL_INVENTORY || []).find(x => x.slug === slug);
+  if (!i) return;
+  const canWrite = userCanSee('inventory_write');
   openModal(`
     <div class="modal-head">
       <div>
         <div style="font-weight:600; font-size:16px;">${i.name}</div>
-        <div style="font-family:var(--mono); font-size:11px; color:var(--dim); margin-top:2px;">${i.sku}</div>
+        <div style="font-family:var(--mono); font-size:11px; color:var(--dim); margin-top:2px;">${i.sku || 'no sku'}</div>
       </div>
       <button class="modal-close" onclick="closeModal()">&times;</button>
     </div>
-    <div class="inv-thumb" style="background:${i.color}; width:100%; height:180px; border-radius:10px; font-size:48px; margin-bottom:14px;">${i.sku.slice(0,3)}</div>
-    <div class="row"><span class="lbl">${t('status_' + i.status).toUpperCase()}</span><span class="val">${i.qty} ${i.qty === 1 ? t('units_left_one') : t('units_left')}</span></div>
-    <div class="row"><span class="lbl">${t('location')}</span><span class="val">${t(`showroom_${i.loc.replace('showroom_','').slice(0,1)}`) || t('warehouse')}</span></div>
+    <div class="inv-thumb" style="${i.photo ? `background-image:url('${i.photo}'); background-size:cover; background-position:center;` : `background:var(--border);`} width:100%; height:180px; border-radius:10px; font-size:48px; margin-bottom:14px;">${i.photo ? '' : (i.sku || i.name).slice(0,3)}</div>
+    <div class="row"><span class="lbl">${INV_STATUS_LABEL[invStatus(i)].toUpperCase()}</span><span class="val">${i.qty_on_hand} ${i.qty_on_hand === 1 ? t('units_left_one') : t('units_left')}</span></div>
+    <div class="row"><span class="lbl">${t('location')}</span><span class="val">${i.location || '—'}</span></div>
     <div class="row"><span class="lbl">Retail</span><span class="val">$${i.price.toLocaleString()}</span></div>
-    <div class="row"><span class="lbl">Cost</span><span class="val">$${i.cost}</span></div>
-    <div class="row"><span class="lbl">Margin</span><span class="val" style="color:var(--success);">$${(i.price - i.cost).toLocaleString()} (${Math.round(((i.price - i.cost)/i.price)*100)}%)</span></div>
-    ${i.status === 'lowstock' ? `<button class="btn primary full" style="margin-top:12px;">${t('reorder_now')}</button>` : ''}
+    ${i.updated_at ? `<div class="row"><span class="lbl">Last updated</span><span class="val">${new Date(i.updated_at).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })} · ${i.updated_by || ''}</span></div>` : ''}
+    ${canWrite ? `
+      <div class="divider"></div>
+      <div class="field"><label class="field-lbl">Set real count</label>
+        <div style="display:flex; gap:8px;">
+          <input class="input" type="number" min="0" id="inv-count-qty" placeholder="e.g. 6" style="flex:1;">
+          <button class="btn primary" onclick="invSetCount('${i.slug}')">Set count</button>
+        </div>
+      </div>
+      <div style="display:flex; gap:8px; margin-top:10px;">
+        <div class="field" style="flex:1;"><label class="field-lbl">Receive qty</label>
+          <div style="display:flex; gap:8px;">
+            <input class="input" type="number" min="1" id="inv-receive-qty" placeholder="e.g. 2" style="flex:1;">
+            <button class="btn ghost" onclick="invReceive('${i.slug}')">Receive</button>
+          </div>
+        </div>
+      </div>
+      <div style="display:flex; gap:8px; margin-top:10px;">
+        <div class="field" style="flex:1;"><label class="field-lbl">Ship qty</label>
+          <div style="display:flex; gap:8px;">
+            <input class="input" type="number" min="1" id="inv-ship-qty" placeholder="e.g. 1" style="flex:1;">
+            <button class="btn ghost" onclick="invShip('${i.slug}')">Ship</button>
+          </div>
+        </div>
+      </div>
+    ` : ''}
   `);
+}
+
+async function invSetCount(slug) {
+  const el = document.getElementById('inv-count-qty');
+  const qty = Number(el.value);
+  if (!Number.isFinite(qty) || qty < 0) { alert('Enter a real count (0 or more).'); return; }
+  try {
+    await api('/api/inventory/' + encodeURIComponent(slug) + '/count', { method: 'POST', body: JSON.stringify({ qty }) });
+    closeModal(); REAL_INVENTORY = null; renderInventory();
+  } catch (e) { alert('Could not save count: ' + (e.message || e)); }
+}
+async function invReceive(slug) {
+  const el = document.getElementById('inv-receive-qty');
+  const qty = Number(el.value);
+  if (!Number.isFinite(qty) || qty <= 0) { alert('Enter a quantity greater than 0.'); return; }
+  try {
+    await api('/api/inventory/' + encodeURIComponent(slug) + '/receive', { method: 'POST', body: JSON.stringify({ qty }) });
+    closeModal(); REAL_INVENTORY = null; renderInventory();
+  } catch (e) { alert('Could not receive stock: ' + (e.message || e)); }
+}
+async function invShip(slug) {
+  const el = document.getElementById('inv-ship-qty');
+  const qty = Number(el.value);
+  if (!Number.isFinite(qty) || qty <= 0) { alert('Enter a quantity greater than 0.'); return; }
+  try {
+    await api('/api/inventory/' + encodeURIComponent(slug) + '/ship', { method: 'POST', body: JSON.stringify({ qty }) });
+    closeModal(); REAL_INVENTORY = null; renderInventory();
+  } catch (e) {
+    const msg = (e && e.message) || String(e);
+    alert(msg.includes('insufficient_stock') ? 'Not enough stock on hand for that.' : 'Could not ship stock: ' + msg);
+  }
 }
 
 /* ============================================================
@@ -3865,7 +3956,9 @@ function openMorningReport() {
   const saCount = THREADS.filter(t => t.loc === 'sa').length;
   const outCount = THREADS.filter(t => t.loc === 'out').length;
   const reviews = THREADS.filter(t => t.intent === 'review_good' || t.intent === 'review_bad');
-  const lowStock = INVENTORY.filter(i => i.status === 'lowstock');
+  // Real inventory if the tab's already been loaded this session; if not,
+  // an honest empty list rather than the old fixture's fabricated numbers.
+  const lowStock = (REAL_INVENTORY || []).filter(i => invStatus(i) === 'low' || invStatus(i) === 'out');
   const topReels = RECENT_REELS.slice().sort((a, b) => b.leads - a.leads).slice(0, 3);
   const yesterday = new Date(TODAY); yesterday.setDate(yesterday.getDate() - 1);
   const yDateStr = yesterday.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
@@ -4010,7 +4103,7 @@ function openMorningReport() {
   <table>
     <thead><tr><th>SKU</th><th>Item</th><th class="r">Qty left</th><th class="r">Retail</th></tr></thead>
     <tbody>
-      ${lowStock.map(i => `<tr><td><b>${i.sku}</b></td><td>${i.name}</td><td class="r"><b style="color:#b8860b;">${i.qty}</b></td><td class="r">$${i.price.toLocaleString()}</td></tr>`).join('')}
+      ${lowStock.map(i => `<tr><td><b>${i.sku || '—'}</b></td><td>${i.name}</td><td class="r"><b style="color:#b8860b;">${i.qty_on_hand}</b></td><td class="r">$${i.price.toLocaleString()}</td></tr>`).join('')}
     </tbody>
   </table>
   ` : ''}

@@ -88,6 +88,13 @@ import {
   deleteAdChannel,
 } from "./lib/advertising-channels.ts";
 import {
+  listInventory,
+  receiveInventory,
+  seedInventoryIfEmpty,
+  setInventoryCount,
+  shipInventory,
+} from "./lib/inventory.ts";
+import {
   createOrder,
   findOrderById,
   listOrders,
@@ -223,7 +230,7 @@ async function readCatalog(assets: Fetcher): Promise<any> {
 // on every single request within the same isolate's lifetime.
 // ═══════════════════════════════════════════════════════════════════════
 let seededThisIsolate = false;
-async function ensureSeeded(): Promise<void> {
+async function ensureSeeded(assets: Fetcher): Promise<void> {
   if (seededThisIsolate) return;
   await seedUsersIfEmpty();
   await seedSampleDataIfEmpty();
@@ -233,6 +240,7 @@ async function ensureSeeded(): Promise<void> {
   await seedDeliveriesIfEmpty();
   await seedSupplierProductsIfEmpty();
   await seedAdChannelsIfEmpty();
+  await seedInventoryIfEmpty(assets);
   seededThisIsolate = true;
 }
 
@@ -304,7 +312,7 @@ interface Env {
 async function handleRequest(req: Request, env: Env): Promise<Response> {
   setEnv(env as unknown as Record<string, string | undefined>);
   setKvNamespace(env.KV);
-  await ensureSeeded();
+  await ensureSeeded(env.ASSETS);
 
   if (req.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: CORS_HEADERS });
@@ -978,6 +986,55 @@ async function handleRequest(req: Request, env: Env): Promise<Response> {
     const ok = await deleteAdChannel(id);
     if (!ok) return json({ error: "not_found" }, 404);
     return json({ success: true });
+  }
+
+  // ── inventory (real qty_on_hand against the real 602-item catalog,
+  // replacing the old 21-SKU hardcoded fixture -- Cockpit plan Phase 5) ──
+  if (path === "/api/inventory" && req.method === "GET") {
+    if (!can("inventory.read")) return json({ error: "forbidden", missing_atom: "inventory.read" }, 403);
+    return json({ items: await listInventory(env.ASSETS) });
+  }
+  if (path.match(/^\/api\/inventory\/[^/]+\/count$/) && req.method === "POST") {
+    if (!can("inventory.write.cycle-count")) return json({ error: "forbidden", missing_atom: "inventory.write.cycle-count" }, 403);
+    const slug = decodeURIComponent(path.split("/")[3]);
+    let body: { qty?: number; location?: string };
+    try {
+      body = await req.json();
+    } catch {
+      return json({ error: "invalid_json" }, 400);
+    }
+    if (typeof body.qty !== "number" || !Number.isFinite(body.qty)) return json({ error: "qty_required" }, 400);
+    const result = await setInventoryCount(env.ASSETS, slug, body.qty, user.name, body.location);
+    if ("error" in result) return json(result, result.error === "slug_not_found" ? 404 : 400);
+    return json({ count: result });
+  }
+  if (path.match(/^\/api\/inventory\/[^/]+\/receive$/) && req.method === "POST") {
+    if (!can("inventory.write.receive")) return json({ error: "forbidden", missing_atom: "inventory.write.receive" }, 403);
+    const slug = decodeURIComponent(path.split("/")[3]);
+    let body: { qty?: number };
+    try {
+      body = await req.json();
+    } catch {
+      return json({ error: "invalid_json" }, 400);
+    }
+    if (typeof body.qty !== "number" || !Number.isFinite(body.qty)) return json({ error: "qty_required" }, 400);
+    const result = await receiveInventory(env.ASSETS, slug, body.qty, user.name);
+    if ("error" in result) return json(result, result.error === "slug_not_found" ? 404 : 400);
+    return json({ count: result });
+  }
+  if (path.match(/^\/api\/inventory\/[^/]+\/ship$/) && req.method === "POST") {
+    if (!can("inventory.write.ship")) return json({ error: "forbidden", missing_atom: "inventory.write.ship" }, 403);
+    const slug = decodeURIComponent(path.split("/")[3]);
+    let body: { qty?: number };
+    try {
+      body = await req.json();
+    } catch {
+      return json({ error: "invalid_json" }, 400);
+    }
+    if (typeof body.qty !== "number" || !Number.isFinite(body.qty)) return json({ error: "qty_required" }, 400);
+    const result = await shipInventory(env.ASSETS, slug, body.qty, user.name);
+    if ("error" in result) return json(result, result.error === "slug_not_found" ? 404 : 400);
+    return json({ count: result });
   }
 
   // ── orders (deposit / balance-due ledger) ───────────────────────────
