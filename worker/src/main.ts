@@ -112,6 +112,16 @@ import {
   updateDeliveryStatus,
 } from "./lib/deliveries.ts";
 import { notifyWorker } from "./lib/notify.ts";
+import { detectCommitment } from "./lib/commitment-detect.ts";
+import {
+  bulkUpsertCandidates,
+  deleteCandidate,
+  findCandidate,
+  getSummary as getHiringSummary,
+  listCandidates,
+  seedHiringCandidatesIfEmpty,
+  upsertCandidate,
+} from "./lib/hiring-candidates.ts";
 import { falConfigured, generateCaptions, PROMO_TAGS, startReel, advanceReel, startStitchJob, advanceStitchJob, startCustomVideo, startTextVideo } from "./lib/reels.ts";
 import { listProspects, logOutreach, runScoutSearch, saveProspect, seedScoutIfEmpty, updateProspect } from "./lib/scout.ts";
 import {
@@ -134,6 +144,7 @@ import { publishToTikTok, tiktokConfigured } from "./lib/tiktok.ts";
 import {
   completeConnect as completeTikTokConnect,
   consumeOAuthState as consumeTikTokOAuthState,
+  getTikTokConn,
   startConnect as startTikTokConnect,
   tiktokOAuthConfigured,
 } from "./lib/tiktok-oauth.ts";
@@ -244,6 +255,7 @@ async function ensureSeeded(assets: Fetcher): Promise<void> {
   await seedSupplierProductsIfEmpty();
   await seedAdChannelsIfEmpty();
   await seedInventoryIfEmpty(assets);
+  await seedHiringCandidatesIfEmpty();
   seededThisIsolate = true;
 }
 
@@ -492,6 +504,70 @@ async function handleRequest(req: Request, env: Env): Promise<Response> {
     return json({ received: inbound.length });
   }
 
+  // ── hiring triage link -- a simple, no-login shareable link for Pasha
+  // to swipe through Indeed candidates (pursue / forget) and keep a
+  // lightweight schedule view (confirmed day/time, notes). Real ask,
+  // Ivan 2026-10-05: "a simple link, asking basically yes/no questions...
+  // whether we need to try and hire them, or delete them from the
+  // database." Deliberately NOT behind the PIN/bearer session system --
+  // gated instead by a single shared key in the URL (HIRING_TRIAGE_KEY),
+  // same pattern techhaus-site's own INTAKE_ADMIN_KEY already uses for
+  // this kind of low-sensitivity, no-friction internal link. "discard"
+  // doesn't set a field, it deletes the record outright -- matches "delete
+  // them from the database" literally, not a soft-hide.
+  if (path === "/api/hiring/triage-link/candidates" && req.method === "GET") {
+    const key = url.searchParams.get("key") || "";
+    if (!getEnv("HIRING_TRIAGE_KEY") || key !== getEnv("HIRING_TRIAGE_KEY")) {
+      return json({ error: "unauthorized" }, 401);
+    }
+    return json({ candidates: await listCandidates() });
+  }
+  if (path.startsWith("/api/hiring/triage-link/") && req.method === "POST") {
+    const key = url.searchParams.get("key") || "";
+    if (!getEnv("HIRING_TRIAGE_KEY") || key !== getEnv("HIRING_TRIAGE_KEY")) {
+      return json({ error: "unauthorized" }, 401);
+    }
+    const id = path.split("/")[4];
+    let body: {
+      triage?: "pending" | "pursue" | "discard";
+      notes?: string;
+      confirmed_day?: string;
+      confirmed_time?: string;
+      summary_state?: string;
+    };
+    try {
+      body = await req.json();
+    } catch {
+      return json({ error: "invalid_json" }, 400);
+    }
+    const existing = await findCandidate(id);
+    if (!existing) return json({ error: "not_found" }, 404);
+    if (body.triage === "discard") {
+      await deleteCandidate(id);
+      return json({ deleted: true });
+    }
+    const candidate = await upsertCandidate({
+      indeed_id: existing.indeed_id,
+      name: existing.name,
+      job_title: existing.job_title,
+      location: existing.location,
+      indeed_status: existing.indeed_status,
+      summary_state: (body.summary_state as typeof existing.summary_state) ?? existing.summary_state,
+      triage: body.triage === "pursue" ? "pursue" : existing.triage,
+      notes: body.notes ?? existing.notes,
+      confirmed_day: body.confirmed_day ?? existing.confirmed_day,
+      confirmed_time: body.confirmed_time ?? existing.confirmed_time,
+      bilingual: existing.bilingual,
+      license: existing.license,
+      flag_reason: existing.flag_reason,
+      last_message_text: existing.last_message_text,
+      last_message_from: existing.last_message_from,
+      last_message_relative: existing.last_message_relative,
+      applied_relative: existing.applied_relative,
+    });
+    return json({ candidate });
+  }
+
   // ── everything below requires a valid bearer session ────────────────
   const user = await userFromToken(bearerToken(req));
   if (!user) return json({ error: "unauthorized" }, 401);
@@ -708,6 +784,36 @@ async function handleRequest(req: Request, env: Env): Promise<Response> {
           title: a.customer_name + "'s financing has been pending over 24h",
           detail: "Ticket #" + a.ticket + " -- " + last.lender + " decision still pending since " + last.at,
           created_at: last.at,
+        });
+      }
+    }
+    // Customer commitment detection ("I'll be there tomorrow at 12") --
+    // real ask, Ivan 2026-10-05. Scans whatever thread data is actually
+    // real right now (WhatsApp today; Facebook/Instagram/TikTok/etc the
+    // moment any of those are actually connected -- see /api/meta/status,
+    // none are live as of this writing, see memory). Same visibility
+    // scoping as GET /api/threads, so a sales-lead only gets alerted on
+    // threads they're actually allowed to see.
+    if (can("messages.read.own") || can("messages.read.team") || can("messages.read.all")) {
+      let threads = await listThreads();
+      if (!can("messages.read.all")) {
+        if (can("messages.read.team")) {
+          threads = threads.filter((t) => (user.assigned_accounts || []).includes(t.account_id) || t.worker_id === user.id);
+        } else {
+          threads = threads.filter((t) => t.worker_id === user.id);
+        }
+      }
+      for (const t of threads) {
+        if (t.last_message_from !== "customer") continue;
+        const hit = detectCommitment(t.preview);
+        if (!hit) continue;
+        alerts.push({
+          id: "alert_commit_" + t.id,
+          type: "commitment",
+          severity: "high",
+          title: t.customer_name + " said when they're coming",
+          detail: "\"" + hit.raw + "\" -- " + t.account_label,
+          created_at: t.last_message_at,
         });
       }
     }
@@ -950,6 +1056,62 @@ async function handleRequest(req: Request, env: Env): Promise<Response> {
     return json({ success: true });
   }
 
+  // ── hiring candidates (Indeed snapshot monitor) ──────────────────────────
+  // Not a live push feed -- Indeed has no self-serve API for this. This
+  // stores whatever the last /sync call found, and the UI shows
+  // sync.synced_at so it's never presented as more real-time than it is.
+  if (path === "/api/hiring/candidates" && req.method === "GET") {
+    if (!can("hiring.read")) return json({ error: "forbidden", missing_atom: "hiring.read" }, 403);
+    return json({ candidates: await listCandidates() });
+  }
+  if (path === "/api/hiring/summary" && req.method === "GET") {
+    if (!can("hiring.read")) return json({ error: "forbidden", missing_atom: "hiring.read" }, 403);
+    return json(await getHiringSummary());
+  }
+  if (path === "/api/hiring/sync" && req.method === "POST") {
+    if (!can("hiring.sync")) return json({ error: "forbidden", missing_atom: "hiring.sync" }, 403);
+    let body: { candidates?: unknown[]; source?: string };
+    try {
+      body = await req.json();
+    } catch {
+      return json({ error: "invalid_json" }, 400);
+    }
+    if (!Array.isArray(body.candidates) || body.candidates.length === 0) {
+      return json({ error: "candidates_array_required" }, 400);
+    }
+    // deno-lint-ignore no-explicit-any
+    const rows = body.candidates as any[];
+    for (const r of rows) {
+      if (!r || typeof r.indeed_id !== "string" || typeof r.name !== "string") {
+        return json({ error: "each_candidate_needs_indeed_id_and_name" }, 400);
+      }
+    }
+    const result = await bulkUpsertCandidates(rows, body.source || "manual-sync");
+    return json(result);
+  }
+  if (path === "/api/hiring/candidates/single" && req.method === "POST") {
+    if (!can("hiring.sync")) return json({ error: "forbidden", missing_atom: "hiring.sync" }, 403);
+    let body: Record<string, unknown>;
+    try {
+      body = await req.json();
+    } catch {
+      return json({ error: "invalid_json" }, 400);
+    }
+    if (typeof body.indeed_id !== "string" || typeof body.name !== "string") {
+      return json({ error: "indeed_id_and_name_required" }, 400);
+    }
+    // deno-lint-ignore no-explicit-any
+    const candidate = await upsertCandidate(body as any);
+    return json({ candidate });
+  }
+  if (path.startsWith("/api/hiring/candidates/") && req.method === "DELETE") {
+    if (!can("hiring.sync")) return json({ error: "forbidden", missing_atom: "hiring.sync" }, 403);
+    const id = path.split("/")[4];
+    const ok = await deleteCandidate(id);
+    if (!ok) return json({ error: "not_found" }, 404);
+    return json({ success: true });
+  }
+
   // ── advertising channels (real outbound radio/JBSA/billboard/TV/EDDM tracker) ──
   if (path === "/api/advertising-channels" && req.method === "GET") {
     if (!can("advertising.read")) return json({ error: "forbidden", missing_atom: "advertising.read" }, 403);
@@ -1135,7 +1297,7 @@ async function handleRequest(req: Request, env: Env): Promise<Response> {
   }
   if (path === "/api/deliveries" && req.method === "POST") {
     if (!can("deliveries.write.schedule")) return json({ error: "forbidden", missing_atom: "deliveries.write.schedule" }, 403);
-    let body: { order_id?: string; customer_name?: string; address_area?: string; scheduled_date?: string; route_label?: string; crew?: string; notes?: string };
+    let body: { order_id?: string; customer_name?: string; address_area?: string; scheduled_date?: string; type?: "delivery" | "pickup"; route_label?: string; crew?: string; notes?: string };
     try {
       body = await req.json();
     } catch {
@@ -1144,7 +1306,7 @@ async function handleRequest(req: Request, env: Env): Promise<Response> {
     if (!body.order_id || !body.customer_name || !body.address_area || !body.scheduled_date || !body.route_label) {
       return json({ error: "missing_fields", required: ["order_id", "customer_name", "address_area", "scheduled_date", "route_label"] }, 400);
     }
-    const delivery = await scheduleDelivery({ order_id: body.order_id, customer_name: body.customer_name, address_area: body.address_area, scheduled_date: body.scheduled_date, route_label: body.route_label, crew: body.crew, notes: body.notes });
+    const delivery = await scheduleDelivery({ order_id: body.order_id, customer_name: body.customer_name, address_area: body.address_area, scheduled_date: body.scheduled_date, type: body.type, route_label: body.route_label, crew: body.crew, notes: body.notes });
     const notified = await notifyCustomerOfDelivery(delivery, "scheduled");
     return json({ delivery, customer_notified: notified });
   }
@@ -1384,6 +1546,77 @@ async function handleRequest(req: Request, env: Env): Promise<Response> {
       configured: metaConfigured(),
       connected: Boolean(conn),
       pages: conn ? conn.pages.map((p) => ({ id: p.id, name: p.name, igUsername: p.igUsername })) : [],
+    });
+  }
+
+  // ── one-screen connections hub: every account's real status in one
+  // call, so the frontend never has to guess which 4-5 separate "is X
+  // configured" endpoints to hit. Every field here is either a real
+  // configured()/connected check against this deployment's own env vars,
+  // or a real count from kvList-backed threads -- nothing here is
+  // invented. Message surfaces mp/pg/ig are explicitly marked `sample:
+  // true` because seedThreads() (lib/sample-data.ts) ships example
+  // conversations for those three surfaces that have never been replaced
+  // by a live webhook (no Meta App Review yet -- see meta-oauth.ts's own
+  // comment on this); wa is real because every wa thread is written by
+  // the real WhatsApp webhook via upsertWhatsAppThread(), never seeded.
+  if (path === "/api/connections/status" && req.method === "GET") {
+    const metaConn = await getMetaConn();
+    const tiktokConn = await getTikTokConn();
+    const threads = await listThreads();
+    const bySurface: Record<string, { total: number; unread: number; sample: boolean }> = {
+      wa: { total: 0, unread: 0, sample: false },
+      mp: { total: 0, unread: 0, sample: true },
+      pg: { total: 0, unread: 0, sample: true },
+      ig: { total: 0, unread: 0, sample: true },
+    };
+    for (const t of threads) {
+      const row = bySurface[t.surface];
+      if (!row) continue;
+      row.total += 1;
+      if (t.unread) row.unread += 1;
+    }
+    const ads = adPlatformsConfigured();
+    return json({
+      social: {
+        meta: {
+          label: "Facebook / Instagram",
+          configured: metaConfigured(),
+          connected: Boolean(metaConn),
+          pages: metaConn ? metaConn.pages.map((p) => ({ id: p.id, name: p.name, igUsername: p.igUsername })) : [],
+          connect_url: "/oauth/facebook/start",
+          setup_doc: "docs/META-BUSINESS-SETUP.md",
+        },
+        tiktok: {
+          label: "TikTok",
+          configured: tiktokOAuthConfigured(),
+          connected: Boolean(tiktokConn),
+          connect_url: "/oauth/tiktok/start",
+          setup_doc: "docs/TIKTOK-SETUP.md",
+        },
+        whatsapp: {
+          label: "WhatsApp Business",
+          configured: Boolean(getEnv("WHATSAPP_TOKEN") && getEnv("WHATSAPP_PHONE_NUMBER_ID")),
+          connected: bySurface.wa.total > 0,
+          setup_doc: "docs/ (see lib/whatsapp.ts header) -- set WHATSAPP_TOKEN, WHATSAPP_PHONE_NUMBER_ID, WHATSAPP_VERIFY_TOKEN, WHATSAPP_APP_SECRET",
+        },
+        email: {
+          label: "Email (daily digest, Resend)",
+          configured: resendConfigured(),
+          connected: resendConfigured(),
+          setup_doc: "docs/RESEND-DIGEST-SETUP.md",
+        },
+      },
+      ad_accounts: {
+        meta: { configured: ads.meta, note: ads.meta ? null : "set META_ADS_ACCESS_TOKEN, META_AD_ACCOUNT_ID" },
+        google: { configured: ads.google, note: ads.google ? null : "set GOOGLE_ADS_DEVELOPER_TOKEN, GOOGLE_ADS_CUSTOMER_ID, GOOGLE_ADS_ACCESS_TOKEN" },
+        tiktok: { configured: ads.tiktok, note: ads.tiktok ? null : "set TIKTOK_ADS_ACCESS_TOKEN, TIKTOK_ADVERTISER_ID" },
+      },
+      messages: {
+        total: threads.length,
+        unread: threads.reduce((s, t) => s + (t.unread ? 1 : 0), 0),
+        by_surface: bySurface,
+      },
     });
   }
 

@@ -6,44 +6,48 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="210 Cockpit">
-<meta name="theme-color" content="#5d85a5">
-<title>210 Cockpit — Pavil Nimerovsky</title>
+<meta name="theme-color" content="#0b0a09">
+<title>210 Cockpit — TechHaus</title>
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icons/icon-180.png">
 <link rel="icon" type="image/svg+xml" href="210-logo.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800&family=Fraunces:ital,wght@0,400;0,500;0,600;1,400;1,500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Fraunces:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400;1,500;1,700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 :root {
-  --bg: #f7f6f1;
-  --surface: #ffffff;
-  --surface-soft: #f0ecdf;
-  --surface-hover: #fffdf6;
-  --border: #e0dbcd;
-  --border-soft: #ece8d9;
-  --ink: #1c1a16;
-  --dim: #76705f;
-  --primary: #5d85a5;
-  --primary-soft: #e8eff5;
-  --primary-deep: #3e6585;
-  --accent: #ffa62b;
-  --accent-soft: #fff1d8;
-  --accent-deep: #cc7e0c;
-  --success: #2d7a3e;
-  --success-soft: #e6f0e8;
-  --warning: #b8860b;
-  --warning-soft: #fbf3dc;
-  --danger: #b8463a;
-  --danger-soft: #fbe8e4;
-  --info: #3d5da6;
-  --info-soft: #e8edf7;
-  --font: "Nunito", "Inter", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+  /* TechHaus's real brand, pulled directly from techhaushq.com -- same
+     tokens used across pasha-update/pasha-advertising/pasha-candidates/Cabinet.
+     Mapped onto this app's existing variable names so no component CSS or
+     JS below needs to change, only the values. */
+  --bg: #0b0a09;
+  --surface: #111009;
+  --surface-soft: #171410;
+  --surface-hover: #1c1812;
+  --border: rgba(255, 255, 255, 0.1);
+  --border-soft: rgba(255, 255, 255, 0.07);
+  --ink: #fff;
+  --dim: #fff;
+  --primary: #f0a020;
+  --primary-soft: rgba(240, 160, 32, 0.12);
+  --primary-deep: #c27f0c;
+  --accent: #3ecfc0;
+  --accent-soft: rgba(62, 207, 192, 0.12);
+  --accent-deep: #2ba89b;
+  --success: #4ec488;
+  --success-soft: rgba(78, 196, 136, 0.14);
+  --warning: #f0a020;
+  --warning-soft: rgba(240, 160, 32, 0.12);
+  --danger: #e8685f;
+  --danger-soft: rgba(232, 104, 95, 0.14);
+  --info: #4f8cf0;
+  --info-soft: rgba(79, 140, 240, 0.12);
+  --font: "Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
   --serif: "Fraunces", "Source Serif Pro", Georgia, serif;
   --mono: "JetBrains Mono", "SF Mono", Menlo, monospace;
-  --label: "Nunito", -apple-system, sans-serif;
-  --shadow-sm: 0 1px 2px rgba(20, 17, 13, 0.04);
-  --shadow-md: 0 4px 14px rgba(20, 17, 13, 0.06);
+  --label: "Plus Jakarta Sans", -apple-system, sans-serif;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 14px rgba(0, 0, 0, 0.4);
 }
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 html, body { margin: 0; padding: 0; }
@@ -203,7 +207,10 @@ nav button.active {
 main {
   max-width: 1080px;
   margin: 0 auto;
-  padding: 16px;
+  padding: 32px 40px;
+}
+@media (max-width: 719px) {
+  main { padding: 16px 20px; }
 }
 .view { display: none; }
 .view.active { display: block; }
@@ -312,6 +319,14 @@ h3 {
   font-size: 13px;
 }
 .row:last-child { border-bottom: none; }
+/* A handful of views zero out the card's own padding so each .row's
+   border-bottom spans edge-to-edge (AP/Tax/Financing on Money, Alerts,
+   Accounts' message list) -- .row itself has no horizontal padding
+   (it relies on the card's 14px), so without this those rows' text sat
+   flush against the card border. Scoped to only the zero-padding cards
+   so normal cards (which already get spacing from their own padding)
+   are untouched. */
+.card[style*="padding:0"] .row { padding: 10px 14px; }
 .row .lbl { flex: 1; }
 .row .meta { font-family: var(--label); font-weight: 600; font-size: 12px; color: var(--dim); }
 .row .val { font-family: var(--mono); font-size: 13px; font-weight: 600; }
@@ -494,12 +509,12 @@ h3 {
 .field { margin-bottom: 12px; }
 .field-lbl {
   display: block;
-  font-family: var(--mono);
-  font-size: 10px;
+  font-family: var(--label);
+  font-size: 11px;
   text-transform: uppercase;
-  letter-spacing: 1.2px;
+  letter-spacing: 0.5px;
   color: var(--dim);
-  font-weight: 500;
+  font-weight: 700;
   margin-bottom: 4px;
 }
 
@@ -815,6 +830,17 @@ h3 {
     <div class="gate-brand-mark">210</div>
     <div class="gate-brand">210 Cockpit</div>
     <div class="gate-sub">210 Discount Furniture -- sign in</div>
+    <div style="display:flex;align-items:center;justify-content:center;gap:6px;margin:-14px 0 24px;opacity:.75;">
+      <svg width="14" height="14" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+        <rect width="100" height="100" rx="22" fill="#f0a020"/>
+        <rect x="12" y="24" width="47" height="10" rx="2" fill="#0b0a09"/>
+        <rect x="22" y="24" width="10" height="52" rx="2" fill="#0b0a09"/>
+        <rect x="49" y="24" width="10" height="52" rx="2" fill="#0b0a09"/>
+        <rect x="68" y="24" width="10" height="52" rx="2" fill="#0b0a09"/>
+        <rect x="49" y="46" width="19" height="10" fill="#0b0a09"/>
+      </svg>
+      <span style="font-size:10.5px;font-weight:700;letter-spacing:.04em;color:var(--dim);">Built by TechHaus</span>
+    </div>
 
     <div id="gate-picker">
       <div class="gate-emp-list" id="gate-emp-list"></div>
@@ -838,6 +864,17 @@ h3 {
       <div class="brand-sub" id="brand-sub" style="margin-top:0;">Your business · one screen</div>
       <div style="font-family: 'Fraunces', Georgia, serif; font-size: 15px; font-weight: 500; letter-spacing: -0.2px; line-height: 1.1; margin-top: 2px;">Cockpit</div>
     </div>
+    <div style="display:flex;align-items:center;gap:6px;margin-left:14px;padding-left:14px;border-left:1px solid var(--border);">
+      <svg width="18" height="18" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+        <rect width="100" height="100" rx="22" fill="#f0a020"/>
+        <rect x="12" y="24" width="47" height="10" rx="2" fill="#0b0a09"/>
+        <rect x="22" y="24" width="10" height="52" rx="2" fill="#0b0a09"/>
+        <rect x="49" y="24" width="10" height="52" rx="2" fill="#0b0a09"/>
+        <rect x="68" y="24" width="10" height="52" rx="2" fill="#0b0a09"/>
+        <rect x="49" y="46" width="19" height="10" fill="#0b0a09"/>
+      </svg>
+      <span style="font-size:11px;font-weight:700;letter-spacing:-.1px;color:var(--ink);">TechHaus</span>
+    </div>
     <div class="head-spacer"></div>
     <div class="lang-toggle">
       <button id="lang-en" class="active" onclick="setLang('en')">EN</button>
@@ -860,13 +897,16 @@ h3 {
   <section class="view" id="view-order"></section>
   <section class="view" id="view-invoices"></section>
   <section class="view" id="view-customers"></section>
+  <section class="view" id="view-deliveries"></section>
   <section class="view" id="view-ads"></section>
   <section class="view" id="view-advertising"></section>
+  <section class="view" id="view-hiring"></section>
   <section class="view" id="view-scout"></section>
   <section class="view" id="view-reels"></section>
   <section class="view" id="view-suppliers"></section>
   <section class="view" id="view-team"></section>
   <section class="view" id="view-live"></section>
+  <section class="view" id="view-connections"></section>
   <section class="view" id="view-alerts"></section>
   <section class="view" id="view-money"></section>
   <section class="view" id="view-manual"></section>
@@ -904,9 +944,12 @@ const I18N = {
     nav_customers: 'Clientes',
     nav_ads: 'Rendimiento',
     nav_advertising: 'Publicidad',
+    nav_hiring: 'Contratacion',
     nav_manual: 'Manual',
     nav_team: 'Equipo',
     nav_live: 'Operaciones',
+    nav_deliveries: 'Entregas',
+    nav_connections: 'Cuentas',
     nav_alerts: 'Alertas',
     alerts_intro: 'Condiciones reales que necesitan tu atencion -- facturas vencidas y financiamiento pendiente hace mas de 24h.',
     alerts_empty: 'Sin alertas activas en este momento.',
@@ -1152,9 +1195,12 @@ const I18N = {
     nav_customers: 'Customers',
     nav_ads: 'Ad Performance',
     nav_advertising: 'Advertising',
+    nav_hiring: 'Hiring',
     nav_manual: 'Manual',
     nav_team: 'Team',
     nav_live: 'Operations',
+    nav_deliveries: 'Deliveries',
+    nav_connections: 'Accounts',
     nav_alerts: 'Alerts',
     alerts_intro: 'Real conditions that need your attention -- overdue supplier invoices and financing stuck pending over 24h.',
     alerts_empty: 'No active alerts right now.',
@@ -1400,11 +1446,14 @@ const I18N = {
     nav_customers: 'Клиенты',
     nav_ads: 'Эффективность рекламы',
     nav_advertising: 'Реклама',
+    nav_hiring: 'Наём',
     nav_manual: 'Инструкция',
     nav_reels: 'Видео',
     nav_suppliers: 'Поставщики',
     nav_team: 'Команда',
     nav_live: 'Операции',
+    nav_deliveries: 'Доставки',
+    nav_connections: 'Аккаунты',
     nav_alerts: 'Оповещения',
     alerts_intro: 'Реальные ситуации, требующие внимания -- просроченные счета поставщиков и финансирование в ожидании более 24 часов.',
     alerts_empty: 'Сейчас активных оповещений нет.',
@@ -1899,13 +1948,16 @@ function renderNav() {
     ['order', 'nav_order'],
     ['invoices', 'nav_invoices'],
     ['customers', 'nav_customers'],
+    ['deliveries', 'nav_deliveries'],
     ['ads', 'nav_ads'],
     ['advertising', 'nav_advertising'],
+    ['hiring', 'nav_hiring'],
     ['scout', 'nav_scout'],
     ['reels', 'nav_reels'],
     ['suppliers', 'nav_suppliers'],
     ['team', 'nav_team'],
     ['live', 'nav_live'],
+    ['connections', 'nav_connections'],
     ['alerts', 'nav_alerts']
   ];
   if (userCanSee('money')) tabs.push(['money', 'nav_money']);
@@ -1932,14 +1984,17 @@ function renderView() {
   if (CURRENT_VIEW === 'order') renderOrder();
   if (CURRENT_VIEW === 'invoices') renderInvoices();
   if (CURRENT_VIEW === 'customers') renderCustomers();
+  if (CURRENT_VIEW === 'deliveries') renderDeliveries();
   if (CURRENT_VIEW === 'ads') renderAds();
   if (CURRENT_VIEW === 'advertising') renderAdvertising();
+  if (CURRENT_VIEW === 'hiring') renderHiring();
   if (CURRENT_VIEW === 'manual') renderManual();
   if (CURRENT_VIEW === 'scout') renderScout();
   if (CURRENT_VIEW === 'reels') renderReels();
   if (CURRENT_VIEW === 'suppliers') renderSuppliers();
   if (CURRENT_VIEW === 'team') renderTeam();
   if (CURRENT_VIEW === 'live') renderLive();
+  if (CURRENT_VIEW === 'connections') renderConnections();
   if (CURRENT_VIEW === 'alerts') renderAlerts();
   if (CURRENT_VIEW === 'money') renderMoney();
 }
@@ -3916,6 +3971,193 @@ async function addAdChannelNoteUI(id) {
   }
 }
 
+/* -------- HIRING (Indeed candidate monitor) --------
+   Not a live push feed -- Indeed has no self-serve API for a small
+   business account (closed 2020, partner-agreement-only since). This
+   shows whatever the last sync found, and always surfaces sync.synced_at
+   so nobody mistakes it for real-time. */
+let HIRING_SUMMARY = null;
+let HIRING_CANDIDATES = null;
+let HIRING_LOADING = false;
+
+async function loadHiringData() {
+  HIRING_LOADING = true;
+  try {
+    const [summary, candData] = await Promise.all([
+      api('/api/hiring/summary'),
+      api('/api/hiring/candidates'),
+    ]);
+    HIRING_SUMMARY = summary;
+    HIRING_CANDIDATES = candData.candidates;
+  } catch (e) {
+    HIRING_SUMMARY = { error: e.message || String(e) };
+  }
+  HIRING_LOADING = false;
+}
+
+const HIRING_STATE_LABEL = {
+  confirmed: 'Confirmed coming',
+  awaiting_reply: 'Awaiting their reply',
+  unread: 'Unread -- needs reading',
+  flagged: 'Flagged -- needs your call',
+  disqualified: 'Disqualified',
+  non_responder: 'No response yet',
+  new_unscreened: 'New, not screened',
+  other: 'Other',
+};
+
+function hiringStateBadge(state) {
+  if (state === 'confirmed') return `<span class="badge success">${HIRING_STATE_LABEL[state]}</span>`;
+  if (state === 'awaiting_reply') return `<span class="badge info">${HIRING_STATE_LABEL[state]}</span>`;
+  if (state === 'unread') return `<span class="badge warning">${HIRING_STATE_LABEL[state]}</span>`;
+  if (state === 'flagged') return `<span class="badge warning">${HIRING_STATE_LABEL[state]}</span>`;
+  if (state === 'disqualified') return `<span class="badge danger">${HIRING_STATE_LABEL[state]}</span>`;
+  if (state === 'non_responder') return `<span class="badge">${HIRING_STATE_LABEL[state]}</span>`;
+  return `<span class="badge">${HIRING_STATE_LABEL[state] || state}</span>`;
+}
+
+function hiringTimeAgo(iso) {
+  if (!iso) return '';
+  const mins = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
+  if (mins < 60) return mins + 'm ago';
+  const hrs = Math.round(mins / 60);
+  if (hrs < 48) return hrs + 'h ago';
+  return Math.round(hrs / 24) + 'd ago';
+}
+
+function renderHiring() {
+  if (!userCanSee('hiring')) {
+    document.getElementById('view-hiring').innerHTML = `<div class="empty">${t('permissions')} — needs <code>hiring</code></div>`;
+    return;
+  }
+  if (HIRING_SUMMARY === null && !HIRING_LOADING) {
+    loadHiringData().then(function() { if (CURRENT_VIEW === 'hiring') renderHiring(); });
+  }
+  if (HIRING_LOADING || HIRING_SUMMARY === null) {
+    document.getElementById('view-hiring').innerHTML = `<h3>Hiring</h3><div class="card"><div class="empty">Loading...</div></div>`;
+    return;
+  }
+  if (HIRING_SUMMARY.error) {
+    document.getElementById('view-hiring').innerHTML = `<h3>Hiring</h3><div class="card attn"><div class="empty" style="color:var(--danger);">Could not reach the worker: ${HIRING_SUMMARY.error}</div></div>`;
+    return;
+  }
+
+  const canSync = (CURRENT_USER.atoms || []).includes('hiring.sync');
+  const sync = HIRING_SUMMARY.sync;
+  const counts = HIRING_SUMMARY.counts;
+  const candidates = HIRING_CANDIDATES || [];
+
+  const syncLine = sync
+    ? `Last synced ${hiringTimeAgo(sync.synced_at)} (${sync.total_known} candidates, source: ${sync.source}) -- not live. There is no Indeed API for this account; someone has to actually re-check Indeed for this to update.`
+    : `Never synced yet.`;
+
+  const order = ['flagged', 'unread', 'confirmed', 'awaiting_reply', 'non_responder', 'new_unscreened', 'disqualified', 'other'];
+
+  const html = `
+    <h3>Hiring -- Indeed candidate monitor</h3>
+    <p class="lead">${syncLine}</p>
+
+    <a href="https://techhaushq.com/pasha-candidates?key=YDrawtAqmhiAUePOQJ1EwN39" target="_blank" rel="noopener" class="card good" style="display:block; margin-bottom:14px; text-decoration:none; color:inherit;">
+      <div class="card-head"><span class="card-title">Open the full Candidates tool</span></div>
+      <div style="font-size:13px; color:var(--dim);">Swipe to triage (pursue/forget), a week-at-a-glance schedule, and a full editable list with notes -- the no-login link you can share with Pasha. Opens in a new tab: techhaushq.com/pasha-candidates</div>
+    </a>
+
+    <div style="display:flex; gap:8px; margin-bottom:14px; flex-wrap:wrap;">
+      ${order.filter(s => counts[s] > 0).map(s => `<div class="badge">${counts[s]} ${HIRING_STATE_LABEL[s]}</div>`).join('')}
+      <button class="btn ghost" onclick="HIRING_SUMMARY=null; HIRING_CANDIDATES=null; renderHiring();">Refresh</button>
+    </div>
+
+    ${HIRING_SUMMARY.needsAttention.length ? `
+      <div class="card attn" style="margin-bottom:14px;">
+        <div class="card-head"><span class="card-title">Needs your attention first (${HIRING_SUMMARY.needsAttention.length})</span></div>
+        ${HIRING_SUMMARY.needsAttention.map(c => hiringCandidateRow(c, canSync)).join('')}
+      </div>
+    ` : ''}
+
+    ${HIRING_SUMMARY.confirmedThisWeek.length ? `
+      <div class="card" style="margin-bottom:14px;">
+        <div class="card-head"><span class="card-title">Said they're coming (${HIRING_SUMMARY.confirmedThisWeek.length})</span></div>
+        ${HIRING_SUMMARY.confirmedThisWeek.map(c => hiringCandidateRow(c, canSync)).join('')}
+      </div>
+    ` : ''}
+
+    <div class="card" style="padding:0;">
+      <div class="card-head" style="padding:14px 16px 0;"><span class="card-title">All candidates (${candidates.length})</span></div>
+      ${candidates.length === 0 ? '<div class="empty" style="padding:16px;">No candidates synced yet.</div>' :
+        candidates.map(c => hiringCandidateRow(c, canSync)).join('')}
+    </div>
+  `;
+  document.getElementById('view-hiring').innerHTML = html;
+}
+
+function hiringCandidateRow(c, canEdit) {
+  const metaBits = [c.location, c.applied_relative, c.indeed_status ? ('Indeed: ' + c.indeed_status) : null].filter(Boolean);
+  const bilingualNote = c.bilingual === 'unknown' ? '' : `<span class="badge ${c.bilingual === 'yes' ? 'success' : 'danger'}" style="font-size:10px;">bilingual: ${c.bilingual}</span>`;
+  const licenseNote = c.license === 'unknown' ? '' : `<span class="badge ${c.license === 'yes' ? 'success' : 'danger'}" style="font-size:10px;">license: ${c.license}</span>`;
+  return `
+    <div class="cust-row" style="cursor:default; flex-direction:column; align-items:stretch; border-top:1px solid var(--border); padding:14px 16px;">
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px; flex-wrap:wrap;">
+        <div style="flex:1; min-width:220px;">
+          <div class="cust-name">${c.name}${c.job_title ? ' <span style="color:var(--dim); font-weight:400;">&middot; ' + c.job_title + '</span>' : ''}</div>
+          ${metaBits.length ? `<div class="cust-meta">${metaBits.join(' &middot; ')}</div>` : ''}
+        </div>
+        <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
+          ${hiringStateBadge(c.summary_state)}
+          ${bilingualNote}
+          ${licenseNote}
+        </div>
+      </div>
+      ${c.summary_state === 'confirmed' && (c.confirmed_day || c.confirmed_time) ? `
+        <div style="margin-top:6px; font-size:12.5px;"><b style="color:var(--ink);">Confirmed:</b> <span style="color:var(--dim);">${[c.confirmed_day, c.confirmed_time].filter(Boolean).join(' at ')}</span></div>
+      ` : ''}
+      ${c.flag_reason ? `<div style="margin-top:6px; font-size:12.5px;"><b style="color:var(--ink);">Why flagged:</b> <span style="color:var(--dim);">${c.flag_reason}</span></div>` : ''}
+      ${c.last_message_text ? `
+        <div style="margin-top:8px; font-size:12px; color:var(--dim); background:var(--surface-soft); border-radius:8px; padding:8px 10px;">
+          <b>${c.last_message_from === 'them' ? c.name : 'Us'}${c.last_message_relative ? ' &middot; ' + c.last_message_relative : ''}:</b> ${c.last_message_text}
+        </div>
+      ` : ''}
+      ${canEdit ? `
+        <div style="margin-top:8px; display:flex; gap:6px; flex-wrap:wrap; align-items:center;">
+          <select onchange="setHiringState('${c.id}', this.value)">
+            <option value="">Change status...</option>
+            ${Object.keys(HIRING_STATE_LABEL).map(s => `<option value="${s}" ${c.summary_state === s ? 'selected' : ''}>${HIRING_STATE_LABEL[s]}</option>`).join('')}
+          </select>
+          <input class="input" id="hiring-note-${c.id}" placeholder="Note / correction" style="flex:1; min-width:160px; font-size:12.5px;">
+          <button class="btn ghost" onclick="saveHiringNote('${c.id}')">Save note</button>
+        </div>
+      ` : ''}
+    </div>
+  `;
+}
+
+async function setHiringState(id, state) {
+  if (!state) return;
+  const c = (HIRING_CANDIDATES || []).find(x => x.id === id);
+  if (!c) return;
+  try {
+    await api('/api/hiring/candidates/single', { method: 'POST', body: JSON.stringify({ indeed_id: c.indeed_id, name: c.name, job_title: c.job_title, indeed_status: c.indeed_status, summary_state: state }) });
+    HIRING_SUMMARY = null; HIRING_CANDIDATES = null;
+    renderHiring();
+  } catch (e) {
+    alert(e.message || String(e));
+  }
+}
+
+async function saveHiringNote(id) {
+  const input = document.getElementById('hiring-note-' + id);
+  const text = input && input.value.trim();
+  if (!text) return;
+  const c = (HIRING_CANDIDATES || []).find(x => x.id === id);
+  if (!c) return;
+  try {
+    await api('/api/hiring/candidates/single', { method: 'POST', body: JSON.stringify({ indeed_id: c.indeed_id, name: c.name, job_title: c.job_title, indeed_status: c.indeed_status, summary_state: c.summary_state, notes: text }) });
+    HIRING_SUMMARY = null; HIRING_CANDIDATES = null;
+    renderHiring();
+  } catch (e) {
+    alert(e.message || String(e));
+  }
+}
+
 /* -------- MANUAL -------- */
 // Real, in-progress documentation -- starts with the Advertising tab since
 // that's what this pass built. Not yet a full app manual; flagged as a
@@ -5238,6 +5480,140 @@ function sampleScript(theme) {
 // (see lib/auth.ts createUser/updateUser). Real roles only -- the Role
 // union in rbac.ts -- not the old legacy perm-string checkboxes.
 const REAL_ROLES = ['owner', 'sales-lead', 'showroom-associate', 'bookkeeper', 'delivery-driver', 'read-only'];
+// Mirrors rbac.ts's ROLE_ATOMS exactly -- same pattern as REAL_ROLES above
+// already mirroring the Role union client-side. Needed so a permission
+// checkbox can tell "this is on because of their role" from "this was
+// turned on/off by hand" without a round trip, and so toggling one sends
+// the real server a {added, removed} diff against the role baseline,
+// never the whole atom list (keeps custom_overrides small and honest).
+const ROLE_ATOMS_CLIENT = {
+  'owner': ['messages.read.own','messages.read.team','messages.read.all','messages.send.assigned-accounts','messages.send.any-account','messages.assign','catalog.read','catalog.read.floor-prices','catalog.write.basic','catalog.write.pricing','inventory.read','inventory.write.cycle-count','inventory.write.receive','inventory.write.ship','financing.read.applications','financing.read.team-aggregate','financing.read.all-applications','financing.initiate','workers.read.own-performance','workers.read.team-leaderboard','workers.read.all-performance','money.read.ap-aging','money.read.cash-position','money.read.tax-obligations','money.read.daily-sales','money.write.mark-paid','notifications.regulatory','notifications.supplier','notifications.lender','thread.mark-won','thread.mark-lost','thread.refund.initiate','reports.read.basic','reports.read.financial','reports.create.custom','config.tenant','config.users','config.integrations','customers.read','customers.write','orders.read.own','orders.read.all','orders.write.deposit','orders.write.balance','deliveries.read','deliveries.write.schedule','deliveries.write.status','messages.send.broadcast','reels.write','scout.read','scout.write','ads.read','advertising.read','advertising.write','hiring.read','hiring.sync'],
+  'sales-lead': ['messages.read.own','messages.read.team','messages.read.all','messages.send.assigned-accounts','messages.send.any-account','messages.assign','catalog.read','catalog.read.floor-prices','catalog.write.basic','inventory.read','inventory.write.cycle-count','inventory.write.receive','inventory.write.ship','financing.read.applications','financing.read.team-aggregate','financing.read.all-applications','financing.initiate','workers.read.own-performance','workers.read.team-leaderboard','notifications.lender','thread.mark-won','thread.mark-lost','reports.read.basic','customers.read','customers.write','orders.read.all','orders.write.deposit','orders.write.balance','deliveries.read','deliveries.write.schedule','reels.write','scout.read','scout.write','advertising.read','advertising.write','hiring.read'],
+  'showroom-associate': ['messages.read.own','messages.send.assigned-accounts','catalog.read','catalog.read.floor-prices','inventory.read','inventory.write.cycle-count','inventory.write.ship','financing.read.applications','financing.initiate','workers.read.own-performance','thread.mark-won','thread.mark-lost','notifications.lender','customers.read','customers.write','orders.read.own','orders.write.deposit','deliveries.read','reels.write'],
+  'bookkeeper': ['money.read.ap-aging','money.read.cash-position','money.read.tax-obligations','money.read.daily-sales','money.write.mark-paid','notifications.regulatory','notifications.supplier','reports.read.financial','reports.read.basic','customers.read','orders.read.all','orders.write.balance'],
+  'delivery-driver': ['inventory.read','inventory.write.ship','messages.read.own','deliveries.read','deliveries.write.status'],
+  'read-only': ['messages.read.all','catalog.read','inventory.read','financing.read.all-applications','workers.read.all-performance','money.read.ap-aging','money.read.cash-position','money.read.tax-obligations','money.read.daily-sales','reports.read.basic','reports.read.financial','customers.read','orders.read.all','deliveries.read','advertising.read'],
+};
+const ATOM_LABELS = {
+  'messages.read.own': 'See their own conversations',
+  'messages.read.team': "See their team's conversations",
+  'messages.read.all': 'See every conversation',
+  'messages.send.assigned-accounts': 'Reply on their assigned accounts',
+  'messages.send.any-account': 'Reply on any account',
+  'messages.assign': 'Assign conversations to teammates',
+  'messages.send.broadcast': 'Send broadcast messages',
+  'catalog.read': 'View the catalog',
+  'catalog.read.floor-prices': 'See floor prices',
+  'catalog.write.basic': 'Edit catalog listings',
+  'catalog.write.pricing': 'Change prices',
+  'inventory.read': 'View inventory',
+  'inventory.write.cycle-count': 'Do inventory counts',
+  'inventory.write.receive': 'Receive stock',
+  'inventory.write.ship': 'Ship/pull stock',
+  'customers.read': 'View customers',
+  'customers.write': 'Edit customers',
+  'orders.read.own': 'See their own orders',
+  'orders.read.all': 'See every order',
+  'orders.write.deposit': 'Take deposits',
+  'orders.write.balance': 'Take balance payments',
+  'thread.mark-won': 'Mark a sale won',
+  'thread.mark-lost': 'Mark a sale lost',
+  'thread.refund.initiate': 'Start a refund',
+  'deliveries.read': 'View deliveries/pickups',
+  'deliveries.write.schedule': 'Schedule deliveries/pickups',
+  'deliveries.write.status': 'Update delivery status',
+  'financing.read.applications': 'See financing applications',
+  'financing.read.team-aggregate': 'See team financing totals',
+  'financing.read.all-applications': 'See every financing application',
+  'financing.initiate': 'Start a financing application',
+  'money.read.ap-aging': 'View bills (accounts payable)',
+  'money.read.cash-position': 'View cash position',
+  'money.read.tax-obligations': 'View tax obligations',
+  'money.read.daily-sales': 'View daily sales',
+  'money.write.mark-paid': 'Mark bills paid',
+  'workers.read.own-performance': 'See their own performance',
+  'workers.read.team-leaderboard': 'See the team leaderboard',
+  'workers.read.all-performance': "See everyone's performance",
+  'reels.write': 'Generate videos/reels',
+  'scout.read': 'View ad-venue research',
+  'scout.write': 'Edit ad-venue research',
+  'ads.read': 'View ad spend dashboards',
+  'advertising.read': 'View advertising outreach tracker',
+  'advertising.write': 'Edit advertising outreach tracker',
+  'hiring.read': 'View hiring candidates',
+  'hiring.sync': 'Sync hiring from Indeed',
+  'reports.read.basic': 'View basic reports',
+  'reports.read.financial': 'View financial reports',
+  'reports.create.custom': 'Build custom reports',
+  'notifications.regulatory': 'Get regulatory alerts',
+  'notifications.supplier': 'Get supplier alerts',
+  'notifications.lender': 'Get lender alerts',
+  'config.tenant': 'Change store-wide settings',
+  'config.users': 'Manage team & permissions',
+  'config.integrations': 'Manage connected accounts',
+};
+const ATOM_GROUPS = [
+  { label: 'Messages', atoms: ['messages.read.own','messages.read.team','messages.read.all','messages.send.assigned-accounts','messages.send.any-account','messages.assign','messages.send.broadcast'] },
+  { label: 'Catalog & inventory', atoms: ['catalog.read','catalog.read.floor-prices','catalog.write.basic','catalog.write.pricing','inventory.read','inventory.write.cycle-count','inventory.write.receive','inventory.write.ship'] },
+  { label: 'Customers & orders', atoms: ['customers.read','customers.write','orders.read.own','orders.read.all','orders.write.deposit','orders.write.balance','thread.mark-won','thread.mark-lost','thread.refund.initiate'] },
+  { label: 'Deliveries & pickups', atoms: ['deliveries.read','deliveries.write.schedule','deliveries.write.status'] },
+  { label: 'Financing', atoms: ['financing.read.applications','financing.read.team-aggregate','financing.read.all-applications','financing.initiate'] },
+  { label: 'Money (sensitive)', atoms: ['money.read.ap-aging','money.read.cash-position','money.read.tax-obligations','money.read.daily-sales','money.write.mark-paid'] },
+  { label: 'Team performance', atoms: ['workers.read.own-performance','workers.read.team-leaderboard','workers.read.all-performance'] },
+  { label: 'Marketing & ads', atoms: ['reels.write','scout.read','scout.write','ads.read','advertising.read','advertising.write'] },
+  { label: 'Hiring', atoms: ['hiring.read','hiring.sync'] },
+  { label: 'Reports & alerts', atoms: ['reports.read.basic','reports.read.financial','reports.create.custom','notifications.regulatory','notifications.supplier','notifications.lender'] },
+  { label: 'Admin', atoms: ['config.tenant','config.users','config.integrations'] },
+];
+let TEAM_PERMS_OPEN = {};
+function userEffectiveAtoms(u) {
+  const set = new Set(ROLE_ATOMS_CLIENT[u.role] || []);
+  if (u.custom_overrides) {
+    (u.custom_overrides.added || []).forEach(a => set.add(a));
+    (u.custom_overrides.removed || []).forEach(a => set.delete(a));
+  }
+  return set;
+}
+function toggleUserAtom(userId, atom, checked) {
+  const u = REAL_TEAM.find(x => x.id === userId);
+  if (!u) return;
+  const baseline = (ROLE_ATOMS_CLIENT[u.role] || []).includes(atom);
+  const prev = u.custom_overrides || { added: [], removed: [] };
+  const ov = { added: prev.added.filter(a => a !== atom), removed: prev.removed.filter(a => a !== atom) };
+  if (checked && !baseline) ov.added.push(atom);
+  if (!checked && baseline) ov.removed.push(atom);
+  patchRealUser(userId, { custom_overrides: ov });
+}
+function renderPermsPanel(u) {
+  if (!TEAM_PERMS_OPEN[u.id]) {
+    return `<button class="btn sm ghost" onclick="TEAM_PERMS_OPEN['${u.id}']=true; renderTeam();">Edit exactly what they can see & do</button>`;
+  }
+  const eff = userEffectiveAtoms(u);
+  const baseline = new Set(ROLE_ATOMS_CLIENT[u.role] || []);
+  return `
+    <button class="btn sm ghost" style="margin-bottom:10px;" onclick="TEAM_PERMS_OPEN['${u.id}']=false; renderTeam();">Hide permissions</button>
+    <div style="font-size:11px; color:var(--dim); margin-bottom:10px;">Checked = they can. Unchecked = they can't. Starts from their role's defaults -- change anything here and it's marked <span style="color:var(--primary);">custom</span>, just for them.</div>
+    <div style="display:flex; flex-direction:column; gap:12px;">
+      ${ATOM_GROUPS.map(g => `
+        <div>
+          <div class="field-lbl" style="margin-bottom:6px;">${g.label}</div>
+          <div style="display:flex; flex-direction:column; gap:6px;">
+            ${g.atoms.map(a => {
+              const checked = eff.has(a);
+              const isCustom = checked !== baseline.has(a);
+              return `
+                <label style="display:flex; align-items:center; gap:8px; font-size:13px; cursor:pointer;">
+                  <input type="checkbox" ${checked ? 'checked' : ''} onchange="toggleUserAtom('${u.id}','${a}',this.checked)">
+                  <span>${ATOM_LABELS[a] || a}${isCustom ? ' <span style="color:var(--primary); font-weight:600;">(custom)</span>' : ''}</span>
+                </label>
+              `;
+            }).join('')}
+          </div>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
 let REAL_TEAM = null;
 let REAL_TEAM_ERROR = null;
 async function loadRealTeam() {
@@ -5288,7 +5664,8 @@ function renderTeam() {
           <label class="field-lbl">WhatsApp phone (for delivery/job notifications)</label>
           <input class="input" value="${u.phone || ''}" placeholder="+1 210..." onchange="patchRealUser('${u.id}', {phone: this.value.trim()})">
         </div>
-        <button class="btn sm ghost" onclick="resetRealUserPin('${u.id}', '${u.name.replace(/'/g, "")}')">Reset PIN</button>
+        <button class="btn sm ghost" style="margin-bottom:10px;" onclick="resetRealUserPin('${u.id}', '${u.name.replace(/'/g, "")}')">Reset PIN</button>
+        ${u.is_master ? '' : `<div class="divider"></div>${renderPermsPanel(u)}`}
       </div>
     `).join('')}
 
@@ -5313,8 +5690,17 @@ function renderTeam() {
 }
 async function patchRealUser(id, patch) {
   try {
-    await api('/api/users/' + id, { method: 'PATCH', body: JSON.stringify(patch) });
-    REAL_TEAM = null;
+    const res = await api('/api/users/' + id, { method: 'PATCH', body: JSON.stringify(patch) });
+    // Patch the real roster in place instead of nulling REAL_TEAM and
+    // re-fetching GET /api/users -- that GET is backed by kvList(), which
+    // is eventually consistent on Cloudflare KV (see lib/kv.ts), so an
+    // immediate re-fetch can intermittently show the OLD role/permissions
+    // for up to ~60s right after a save. The PATCH response already
+    // carries the real updated user -- use it directly.
+    if (REAL_TEAM) {
+      const i = REAL_TEAM.findIndex(x => x.id === id);
+      if (i >= 0) REAL_TEAM[i] = res.user;
+    }
     renderTeam();
   } catch (e) {
     alert('Could not update: ' + e.message);
@@ -5343,7 +5729,15 @@ async function createRealUser() {
     document.getElementById('new-user-name').value = '';
     document.getElementById('new-user-email').value = '';
     document.getElementById('new-user-phone').value = '';
-    REAL_TEAM = null;
+    // Same kvList() eventual-consistency note as patchRealUser -- append
+    // the just-created user directly rather than nulling REAL_TEAM, so a
+    // brand-new login doesn't intermittently vanish from the roster for
+    // up to ~60s right after creating it.
+    if (REAL_TEAM) REAL_TEAM.push(res.user); else REAL_TEAM = [res.user];
+    const savedMsg = resultEl.innerHTML;
+    renderTeam();
+    const freshResultEl = document.getElementById('new-user-result');
+    if (freshResultEl) freshResultEl.innerHTML = savedMsg;
   } catch (e) {
     resultEl.innerHTML = '<span style="color:var(--danger);">' + e.message + '</span>';
   }
@@ -5693,6 +6087,18 @@ function renderDeliveryAssign(d) {
     </div>
   `;
 }
+// Cloudflare KV's list() is eventually consistent -- writes can take up to
+// ~60s to show up in a fresh list() read (see lib/kv.ts's own comment on
+// this). Re-fetching the whole deliveries list right after a write would
+// intermittently make a just-created/just-updated delivery vanish from the
+// screen for up to a minute. Every real write below already returns the
+// updated object directly, so patch it into LIVE_DATA.deliveries in place
+// instead of re-fetching -- correct immediately, no race.
+function calPatchDelivery(updated) {
+  if (!LIVE_DATA.deliveries) LIVE_DATA.deliveries = [];
+  const i = LIVE_DATA.deliveries.findIndex(d => d.id === updated.id);
+  if (i >= 0) LIVE_DATA.deliveries[i] = updated; else LIVE_DATA.deliveries.unshift(updated);
+}
 async function assignDelivery(deliveryId) {
   const sel = document.getElementById('assign-select-' + deliveryId);
   const userId = sel ? sel.value : '';
@@ -5705,11 +6111,206 @@ async function assignDelivery(deliveryId) {
       const reason = res.worker_notified ? res.worker_notified.reason : 'unknown';
       alert('Assigned, but the WhatsApp notification did not go out (' + reason + '). Tell them directly for now.');
     }
-    LIVE_DATA.deliveries = null;
-    refreshLiveData();
+    calPatchDelivery(res.delivery);
+    if (CURRENT_VIEW === 'live') renderLive();
+    if (CURRENT_VIEW === 'deliveries') renderDeliveries();
   } catch (e) {
     alert('Could not assign: ' + (e.message || e));
   }
+}
+
+/* ============================================================
+   DELIVERIES — real built-in calendar, click a day to see and
+   schedule deliveries AND pickups. Backend (lib/deliveries.ts,
+   /api/deliveries*) was already fully real -- assign+WhatsApp-notify
+   and status+customer-notify both already worked -- this was the one
+   piece missing: an actual calendar someone can click through, and any
+   way at all to create a new delivery/pickup or change its status from
+   the UI. Ivan asked for exactly this: "Delivery schedule, pick up
+   schedule at the click of a button in the built in calendar."
+   ============================================================ */
+function hasAtom(a) { return !!(CURRENT_USER && CURRENT_USER.atoms && CURRENT_USER.atoms.includes(a)); }
+let CAL_MONTH = null; // 'YYYY-MM'
+let CAL_SELECTED_DATE = null; // 'YYYY-MM-DD'
+let CAL_SCHEDULE_OPEN = false;
+let CAL_NEW = { order_id: '', customer_name: '', address_area: '', type: 'delivery', route_label: '', crew: '', notes: '' };
+let CAL_BUSY = false;
+
+function calMonthLabel(ym) {
+  const [y, m] = ym.split('-').map(Number);
+  return new Date(y, m - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+}
+function calShiftMonth(ym, delta) {
+  const [y, m] = ym.split('-').map(Number);
+  const d = new Date(y, m - 1 + delta, 1);
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0');
+}
+function calGoToMonth(delta) { CAL_MONTH = calShiftMonth(CAL_MONTH, delta); renderDeliveries(); }
+function calSelectDate(dateStr) { CAL_SELECTED_DATE = dateStr; CAL_SCHEDULE_OPEN = false; renderDeliveries(); }
+function calOpenSchedule() {
+  CAL_NEW = { order_id: '', customer_name: '', address_area: '', type: 'delivery', route_label: '', crew: '', notes: '' };
+  CAL_SCHEDULE_OPEN = true;
+  renderDeliveries();
+}
+function calSetType(ty) { CAL_NEW.type = ty; renderDeliveries(); }
+function calOrderPicked(orderId) {
+  CAL_NEW.order_id = orderId;
+  const o = (LIVE_DATA.orders || []).find(x => x.id === orderId);
+  if (o) CAL_NEW.customer_name = o.customer_name;
+  renderDeliveries();
+}
+async function calSubmitSchedule() {
+  if (!CAL_NEW.order_id) { alert('Pick which order this is for.'); return; }
+  if (!CAL_NEW.customer_name || !CAL_NEW.address_area || !CAL_NEW.route_label) {
+    alert(CAL_NEW.type === 'pickup' ? 'Customer name, where they\'re coming from, and a label (e.g. "In-store pickup") are all required.' : 'Customer name, delivery area, and a route label are all required.');
+    return;
+  }
+  CAL_BUSY = true; renderDeliveries();
+  try {
+    await api('/api/deliveries', { method: 'POST', body: JSON.stringify({
+      order_id: CAL_NEW.order_id, customer_name: CAL_NEW.customer_name, address_area: CAL_NEW.address_area,
+      scheduled_date: CAL_SELECTED_DATE, type: CAL_NEW.type, route_label: CAL_NEW.route_label,
+      crew: CAL_NEW.crew || undefined, notes: CAL_NEW.notes || undefined,
+    }) });
+    CAL_SCHEDULE_OPEN = false;
+    LIVE_DATA.deliveries = null;
+    await refreshLiveData();
+  } catch (e) {
+    alert('Could not schedule: ' + (e.message || e));
+  }
+  CAL_BUSY = false;
+  renderDeliveries();
+}
+const CAL_STATUS_NEXT = { scheduled: 'en-route', 'en-route': 'delivered' };
+const CAL_STATUS_LABEL = { scheduled: 'Scheduled', 'en-route': 'En route', delivered: 'Delivered', failed: 'Failed' };
+async function calSetStatus(deliveryId, status) {
+  CAL_BUSY = true; renderDeliveries();
+  try {
+    await api('/api/deliveries/status', { method: 'POST', body: JSON.stringify({ id: deliveryId, status }) });
+    LIVE_DATA.deliveries = null;
+    await refreshLiveData();
+  } catch (e) {
+    alert('Could not update status: ' + (e.message || e));
+  }
+  CAL_BUSY = false;
+  renderDeliveries();
+}
+function calDayItem(d) {
+  const canAssign = hasAtom('deliveries.write.schedule');
+  const canStatus = hasAtom('deliveries.write.status');
+  const next = CAL_STATUS_NEXT[d.status];
+  return `
+    <div class="card" style="margin-bottom:10px;">
+      <div class="card-head">
+        <span class="card-title">${d.type === 'pickup' ? 'PICKUP' : 'DELIVERY'} · ${d.customer_name}</span>
+        <span class="badge ${d.status === 'delivered' ? 'success' : d.status === 'failed' ? 'danger' : d.status === 'en-route' ? 'info' : 'warning'}">${CAL_STATUS_LABEL[d.status]}</span>
+      </div>
+      <div class="meta" style="margin-bottom:8px;">${d.address_area} · ${d.route_label}${d.notes ? ' · ' + d.notes : ''}</div>
+      ${canAssign ? renderDeliveryAssign(d) : (d.crew ? `<div class="small" style="color:var(--dim);">Assigned: ${d.crew}</div>` : '<div class="small" style="color:var(--dim);">Not assigned yet.</div>')}
+      ${canStatus ? `
+        <div style="display:flex; gap:6px; margin-top:8px; flex-wrap:wrap;">
+          ${next ? `<button class="btn sm primary" ${CAL_BUSY ? 'disabled' : ''} onclick="calSetStatus('${d.id}','${next}')">Mark ${CAL_STATUS_LABEL[next].toLowerCase()}</button>` : ''}
+          ${d.status !== 'failed' && d.status !== 'delivered' ? `<button class="btn sm ghost" ${CAL_BUSY ? 'disabled' : ''} onclick="calSetStatus('${d.id}','failed')">Mark failed</button>` : ''}
+        </div>
+      ` : ''}
+    </div>
+  `;
+}
+function calScheduleForm() {
+  const orders = LIVE_DATA.orders || [];
+  return `
+    <div class="card" style="background:var(--surface-soft); border-style:dashed; margin-bottom:10px;">
+      <div class="card-head"><span class="card-title">Schedule for ${CAL_SELECTED_DATE}</span></div>
+      <div style="display:flex; gap:6px; margin-bottom:10px;">
+        <button class="btn sm ${CAL_NEW.type === 'delivery' ? 'primary' : 'ghost'}" onclick="calSetType('delivery')">Delivery</button>
+        <button class="btn sm ${CAL_NEW.type === 'pickup' ? 'primary' : 'ghost'}" onclick="calSetType('pickup')">Pickup</button>
+      </div>
+      <div class="field"><label class="field-lbl">Order</label>
+        <select class="select" onchange="calOrderPicked(this.value)">
+          <option value="">Pick the order this is for...</option>
+          ${orders.map(o => `<option value="${o.id}" ${CAL_NEW.order_id === o.id ? 'selected' : ''}>${o.customer_name} — ${(o.product_slugs || []).join(', ').slice(0, 40)}</option>`).join('')}
+        </select>
+      </div>
+      <div class="field"><label class="field-lbl">Customer name</label><input class="input" value="${CAL_NEW.customer_name}" oninput="CAL_NEW.customer_name=this.value;"></div>
+      <div class="field"><label class="field-lbl">${CAL_NEW.type === 'pickup' ? "Coming from (area)" : "Delivery area"}</label><input class="input" value="${CAL_NEW.address_area}" oninput="CAL_NEW.address_area=this.value;" placeholder="e.g. Converse, TX"></div>
+      <div class="field"><label class="field-lbl">${CAL_NEW.type === 'pickup' ? 'Label' : 'Route label'}</label><input class="input" value="${CAL_NEW.route_label}" oninput="CAL_NEW.route_label=this.value;" placeholder="${CAL_NEW.type === 'pickup' ? 'In-store pickup' : 'Route A - Northeast'}"></div>
+      <div class="field"><label class="field-lbl">Crew (optional -- or assign after)</label><input class="input" value="${CAL_NEW.crew}" oninput="CAL_NEW.crew=this.value;"></div>
+      <div class="field"><label class="field-lbl">Notes (optional)</label><input class="input" value="${CAL_NEW.notes}" oninput="CAL_NEW.notes=this.value;" placeholder="2nd floor, no elevator, etc."></div>
+      <div style="display:flex; gap:6px;">
+        <button class="btn primary" ${CAL_BUSY ? 'disabled' : ''} onclick="calSubmitSchedule()">${CAL_BUSY ? 'Scheduling...' : 'Schedule it'}</button>
+        <button class="btn ghost" onclick="CAL_SCHEDULE_OPEN=false; renderDeliveries();">Cancel</button>
+      </div>
+    </div>
+  `;
+}
+function renderDeliveries() {
+  if (!hasAtom('deliveries.read')) {
+    document.getElementById('view-deliveries').innerHTML = `<h3>${t('nav_deliveries')}</h3><div class="empty">${t('permissions')} — needs <code>deliveries.read</code></div>`;
+    return;
+  }
+  if (!CAL_MONTH) CAL_MONTH = TODAY.slice(0, 7);
+  if (!CAL_SELECTED_DATE) CAL_SELECTED_DATE = TODAY;
+  if (LIVE_DATA.deliveries === null) { refreshLiveData(); }
+
+  const all = LIVE_DATA.deliveries || [];
+  const byDate = {};
+  all.forEach(d => { (byDate[d.scheduled_date] = byDate[d.scheduled_date] || []).push(d); });
+
+  const [y, m] = CAL_MONTH.split('-').map(Number);
+  const firstOfMonth = new Date(y, m - 1, 1);
+  const startWeekday = firstOfMonth.getDay();
+  const daysInMonth = new Date(y, m, 0).getDate();
+  const cells = [];
+  for (let i = 0; i < startWeekday; i++) cells.push(null);
+  for (let day = 1; day <= daysInMonth; day++) cells.push(y + '-' + String(m).padStart(2, '0') + '-' + String(day).padStart(2, '0'));
+
+  const gridHtml = `
+    <div class="card">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+        <button class="btn sm ghost" onclick="calGoToMonth(-1)">&larr;</button>
+        <span style="font-family:var(--serif); font-weight:600; font-size:16px;">${calMonthLabel(CAL_MONTH)}</span>
+        <button class="btn sm ghost" onclick="calGoToMonth(1)">&rarr;</button>
+      </div>
+      <div style="display:grid; grid-template-columns:repeat(7,1fr); gap:4px; font-family:var(--mono); font-size:9px; text-transform:uppercase; color:var(--dim); text-align:center; margin-bottom:4px;">
+        ${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d => `<div>${d}</div>`).join('')}
+      </div>
+      <div style="display:grid; grid-template-columns:repeat(7,1fr); gap:4px;">
+        ${cells.map(dateStr => {
+          if (!dateStr) return '<div></div>';
+          const items = byDate[dateStr] || [];
+          const dCount = items.filter(x => x.type !== 'pickup').length;
+          const pCount = items.filter(x => x.type === 'pickup').length;
+          const isToday = dateStr === TODAY;
+          const isSel = dateStr === CAL_SELECTED_DATE;
+          const dayNum = Number(dateStr.slice(-2));
+          return `
+            <div onclick="calSelectDate('${dateStr}')" style="cursor:pointer; border-radius:8px; padding:6px 4px; min-height:48px; background:${isSel ? 'var(--primary-soft)' : 'var(--surface-soft)'}; border:1px solid ${isToday ? 'var(--primary)' : 'transparent'};">
+              <div style="font-family:var(--mono); font-size:11px; font-weight:${isToday ? '700' : '500'}; color:${isToday ? 'var(--primary)' : 'var(--ink)'};">${dayNum}</div>
+              ${dCount ? `<div style="font-size:9px; color:var(--warning); font-weight:600;">${dCount}D</div>` : ''}
+              ${pCount ? `<div style="font-size:9px; color:var(--info); font-weight:600;">${pCount}P</div>` : ''}
+            </div>
+          `;
+        }).join('')}
+      </div>
+    </div>
+  `;
+
+  const dayItems = byDate[CAL_SELECTED_DATE] || [];
+  const detailHtml = `
+    <div class="card-head" style="margin-top:4px;">
+      <span class="card-title">${CAL_SELECTED_DATE}${CAL_SELECTED_DATE === TODAY ? ' (today)' : ''}</span>
+      ${hasAtom('deliveries.write.schedule') && !CAL_SCHEDULE_OPEN ? `<button class="btn sm primary" onclick="calOpenSchedule()">+ Schedule</button>` : ''}
+    </div>
+    ${CAL_SCHEDULE_OPEN ? calScheduleForm() : ''}
+    ${dayItems.length === 0 && !CAL_SCHEDULE_OPEN ? '<div class="empty">Nothing scheduled this day.</div>' : dayItems.map(calDayItem).join('')}
+  `;
+
+  document.getElementById('view-deliveries').innerHTML = `
+    <h3>${t('nav_deliveries')}</h3>
+    <p class="lead">Every delivery and pickup, on a real calendar. D = deliveries, P = pickups. Click any day to see or schedule.</p>
+    ${gridHtml}
+    ${detailHtml}
+  `;
 }
 
 /* ============================================================
@@ -5756,6 +6357,111 @@ function renderAlerts() {
     <button class="btn ghost" style="margin-top:10px;" onclick="loadAlerts()">Refresh</button>
   `;
   document.getElementById('view-alerts').innerHTML = html;
+}
+
+/* ============================================================
+   CONNECTIONS — the one screen that answers "where do I log in to
+   everything": real status for every social/ad/email account this
+   worker knows how to talk to, pulled from a single real endpoint
+   (/api/connections/status -- see main.ts). Every badge below is a real
+   configured()/connected check against this deployment's actual env
+   vars, never guessed. A platform with no credentials set shows "Not
+   set up" plus exactly which env vars to add -- the same honesty
+   pattern as the Ads tab and the Live tab's Meta card, just gathered
+   into one place instead of scattered across three tabs.
+   ============================================================ */
+let CONN_STATUS = null;
+let CONN_ADS = null;
+async function loadConnStatus() {
+  try { CONN_STATUS = await api('/api/connections/status'); } catch (e) { CONN_STATUS = { error: e.message || String(e) }; }
+  if (CURRENT_VIEW === 'connections') renderConnections();
+}
+function connBadge(configured, connected) {
+  if (connected) return '<span class="badge success">Connected</span>';
+  if (configured) return '<span class="badge warning">Set up, not connected</span>';
+  return '<span class="badge">Not set up</span>';
+}
+function renderConnectionCard(key, acct) {
+  const rows = [];
+  if (acct.connected && acct.pages && acct.pages.length) {
+    rows.push(`<div class="meta">${acct.pages.map(p => p.name + (p.igUsername ? ' (IG: @' + p.igUsername + ')' : '')).join(', ')}</div>`);
+  } else if (acct.connected) {
+    rows.push('<div class="meta">Connected.</div>');
+  } else if (acct.configured) {
+    rows.push('<div class="meta">Credentials are set on this deployment but no account has completed login yet.</div>');
+    if (acct.connect_url) rows.push(`<a class="btn primary sm" href="${acct.connect_url}?token=${encodeURIComponent(SESSION_TOKEN || '')}" style="display:inline-block; margin-top:6px; text-decoration:none;">Connect ${acct.label}</a>`);
+  } else {
+    rows.push(`<div class="meta">Not set up on this deployment yet. ${acct.setup_doc ? 'Needs: ' + acct.setup_doc : ''}</div>`);
+  }
+  return `
+    <div class="card">
+      <div class="card-head"><span class="card-title">${acct.label}</span>${connBadge(acct.configured, acct.connected)}</div>
+      ${rows.join('')}
+    </div>
+  `;
+}
+function renderAdAccountCard(name, info) {
+  return `
+    <div class="card">
+      <div class="card-head"><span class="card-title">${name} spend tracking</span>${connBadge(info.configured, info.configured)}</div>
+      ${info.configured ? '<div class="meta">Connected -- see spend below.</div>' : `<div class="meta">Not set up. Needs: ${info.note}</div>`}
+    </div>
+  `;
+}
+const CONN_SURFACE_LABEL = { wa: 'WhatsApp', mp: 'Facebook Marketplace', pg: 'Facebook Page', ig: 'Instagram' };
+function renderConnections() {
+  if (CONN_STATUS === null) { loadConnStatus(); }
+  if (CONN_ADS === null) { api('/api/ads/insights').then(function(r) { CONN_ADS = r; if (CURRENT_VIEW === 'connections') renderConnections(); }).catch(function(e) { CONN_ADS = { error: e.message || String(e) }; }); }
+
+  let body;
+  if (CONN_STATUS === null) {
+    body = '<div class="empty">Checking every account...</div>';
+  } else if (CONN_STATUS.error) {
+    body = `<div class="card attn"><div class="empty" style="color:var(--danger);">Could not reach the worker: ${CONN_STATUS.error}</div></div><button class="btn ghost" onclick="CONN_STATUS=null; renderConnections();">Retry</button>`;
+  } else {
+    const s = CONN_STATUS.social;
+    const adSpendHtml = (CONN_ADS === null) ? '<div class="empty">Loading real ad spend...</div>' :
+      CONN_ADS.error ? `<div class="empty">Could not load: ${CONN_ADS.error}</div>` :
+      `<div class="grid-2">
+        ${renderAdInsightCard('Meta Ads (Facebook/Instagram)', '#1877f2', CONN_ADS.meta)}
+        ${renderAdInsightCard('Google Ads', '#4285f4', CONN_ADS.google)}
+        ${renderAdInsightCard('TikTok Ads', '#14747a', CONN_ADS.tiktok)}
+      </div>`;
+    const msgRows = Object.keys(CONN_STATUS.messages.by_surface).map(function(surf) {
+      const row = CONN_STATUS.messages.by_surface[surf];
+      return `
+        <div class="row">
+          <div style="flex:1;"><div class="lbl">${CONN_SURFACE_LABEL[surf] || surf}</div>
+          <div class="meta">${row.sample ? 'Example data -- not a real connected account yet' : 'Live'}</div></div>
+          <div class="val">${row.total} msgs${row.unread ? ' · ' + row.unread + ' unread' : ''}</div>
+        </div>
+      `;
+    }).join('');
+    body = `
+      <h3>Social &amp; messaging logins</h3>
+      <p class="lead">Every account this Cockpit can talk to, and whether it's actually logged in right now. "Set up, not connected" means Pasha's credentials are on the server but nobody has clicked Connect yet -- that's a one-click fix below. "Not set up" means the account's API keys were never added to this deployment -- that's on Ivan, not a missing feature.</p>
+      ${renderConnectionCard('meta', s.meta)}
+      ${renderConnectionCard('tiktok', s.tiktok)}
+      ${renderConnectionCard('whatsapp', s.whatsapp)}
+      ${renderConnectionCard('email', s.email)}
+
+      <div class="divider"></div>
+      <h3>Ad spend, by platform</h3>
+      <p class="lead">Real spend/impressions/clicks/conversions pulled straight from each platform's own ads API once its access token is on file. (This is a separate login from the one above -- an ads account and a posting/messaging login use different credentials even on the same platform.)</p>
+      ${adSpendHtml}
+
+      <div class="divider"></div>
+      <h3>Messages received, by account</h3>
+      <p class="lead">How many conversations are sitting in each channel right now.</p>
+      <div class="card" style="padding:0;">${msgRows}</div>
+
+      <div class="card" style="background:var(--surface-soft); border-style:dashed; margin-top:14px;">
+        <div class="card-head"><span class="card-title">Cost per message</span></div>
+        <div class="meta">Not shown yet, on purpose: it needs BOTH a connected ad account AND a live (not example) inbox on the same platform, and right now no platform has both at once -- WhatsApp has real messages but no ad spend tracking, and Meta/Google/TikTok Ads (once connected) don't yet have a live inbox to divide into. Once Meta Ads is connected above and Meta App Review grants real Facebook/Instagram message access, this card will compute automatically -- it will never show an estimated number before then.</div>
+      </div>
+    `;
+  }
+  document.getElementById('view-connections').innerHTML = `<h3>${t('nav_connections')}</h3>` + body;
 }
 
 /* ============================================================
@@ -6034,6 +6740,7 @@ ROLE_LEGACY_PERMS.owner.push("customers");
 ROLE_LEGACY_PERMS.owner.push("customers_email");
 ROLE_LEGACY_PERMS.owner.push("ads");
 ROLE_LEGACY_PERMS.owner.push("advertising");
+ROLE_LEGACY_PERMS.owner.push("hiring");
 ROLE_LEGACY_PERMS.owner.push("team");
 ROLE_LEGACY_PERMS.owner.push("money");
 ROLE_LEGACY_PERMS.owner.push("reviews");
@@ -6045,6 +6752,7 @@ ROLE_LEGACY_PERMS["sales-lead"].push("customers");
 ROLE_LEGACY_PERMS["sales-lead"].push("customers_email");
 ROLE_LEGACY_PERMS["sales-lead"].push("ads");
 ROLE_LEGACY_PERMS["sales-lead"].push("advertising");
+ROLE_LEGACY_PERMS["sales-lead"].push("hiring");
 ROLE_LEGACY_PERMS["sales-lead"].push("reviews");
 ROLE_LEGACY_PERMS["showroom-associate"] = [];
 ROLE_LEGACY_PERMS["showroom-associate"].push("inbox_assigned");

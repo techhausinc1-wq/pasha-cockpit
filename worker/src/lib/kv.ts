@@ -57,8 +57,15 @@ export async function kvList<T>(resource: string): Promise<T[]> {
     const page: { keys: { name: string }[]; cursor?: string; list_complete?: boolean } = await (kv() as unknown as {
       list(opts: { prefix: string; cursor?: string }): Promise<{ keys: { name: string }[]; cursor?: string; list_complete?: boolean }>;
     }).list({ prefix, cursor });
-    for (const k of page.keys) {
-      const raw = await kv().get(k.name);
+    // Real bug, found 2026-10-05: these were fetched one at a time in a
+    // `for` loop -- for a 24-candidate Hiring list that's 24 sequential
+    // KV round-trips before anything can render, easily several seconds
+    // on a cold edge read. Looked exactly like "the page is empty" and
+    // made the Triage buttons silently no-op (CANDIDATES was still []
+    // when clicked). Parallelized with Promise.all -- same data, same
+    // ordering (still sorted by _ord below), just not serialized.
+    const raws = await Promise.all(page.keys.map((k) => kv().get(k.name)));
+    for (const raw of raws) {
       if (raw) {
         try {
           out.push(JSON.parse(raw) as T);

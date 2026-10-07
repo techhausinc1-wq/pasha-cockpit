@@ -7,6 +7,7 @@ import { findOrderById } from "./orders.ts";
 const RES = "deliveries";
 
 export type DeliveryStatus = "scheduled" | "en-route" | "delivered" | "failed";
+export type DeliveryType = "delivery" | "pickup";
 
 export interface Delivery {
   id: string;
@@ -14,6 +15,7 @@ export interface Delivery {
   customer_name: string;
   address_area: string;
   scheduled_date: string; // YYYY-MM-DD
+  type: DeliveryType; // outbound delivery to the customer, or the customer picking up in-store
   route_label: string;
   crew: string | null; // display name -- kept free-text since a crew can be more than one person
   assigned_user_id: string | null; // real roster user id, set by assignDeliveryCrew() -- what notifyWorker() actually targets
@@ -33,6 +35,7 @@ export function seedDeliveries(): Delivery[] {
     customer_name: "Joel Bryant",
     address_area: "Converse, TX",
     scheduled_date: new Date(now + 3 * 86400000).toISOString().slice(0, 10),
+    type: "delivery",
     route_label: "Route A - Northeast",
     crew: "Manny & Deo",
     assigned_user_id: null,
@@ -63,6 +66,7 @@ export async function scheduleDelivery(input: {
   customer_name: string;
   address_area: string;
   scheduled_date: string;
+  type?: DeliveryType;
   route_label: string;
   crew?: string | null;
   notes?: string | null;
@@ -77,6 +81,7 @@ export async function scheduleDelivery(input: {
     customer_name: input.customer_name,
     address_area: input.address_area,
     scheduled_date: input.scheduled_date,
+    type: input.type === "pickup" ? "pickup" : "delivery",
     route_label: input.route_label,
     crew: input.crew ?? null,
     assigned_user_id: null,

@@ -77,7 +77,10 @@ export type Atom =
   | "ads.read"
   // Outbound advertising-channel tracker (radio/JBSA/billboard/TV/EDDM)
   | "advertising.read"
-  | "advertising.write";
+  | "advertising.write"
+
+  | "hiring.read"
+  | "hiring.sync";
 
 export type Role =
   | "owner"
@@ -143,6 +146,8 @@ export const ROLE_ATOMS: Record<Role, Atom[]> = {
     "ads.read",
     "advertising.read",
     "advertising.write",
+    "hiring.read",
+    "hiring.sync",
   ],
   "sales-lead": [
     "messages.read.own",
@@ -180,6 +185,7 @@ export const ROLE_ATOMS: Record<Role, Atom[]> = {
     "scout.write",
     "advertising.read",
     "advertising.write",
+    "hiring.read",
   ],
   "showroom-associate": [
     "messages.read.own",
