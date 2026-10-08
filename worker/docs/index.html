@@ -2547,6 +2547,29 @@ async function loadCatalog() {
 function catalogFind(slug) { return (REAL_CATALOG.products || []).find(p => p.slug === slug); }
 
 let ORDER_CART = { items: [], search: '', cat: 'all' };
+// Fix for a real reported bug: search inputs that trigger a full view
+// re-render on every keystroke destroy and recreate the <input> element,
+// which drops focus after each character typed (looks like "won't accept
+// typing" -- you can only type one letter before losing focus). This
+// wrapper captures focus + cursor position before re-rendering and
+// restores it after, as long as the input kept the same id.
+function preserveFocusRerender(renderFn) {
+  const active = document.activeElement;
+  const id = active && active.id;
+  const selStart = active && typeof active.selectionStart === 'number' ? active.selectionStart : null;
+  const selEnd = active && typeof active.selectionEnd === 'number' ? active.selectionEnd : null;
+  renderFn();
+  if (id) {
+    const el = document.getElementById(id);
+    if (el) {
+      el.focus();
+      if (selStart !== null && el.setSelectionRange) {
+        try { el.setSelectionRange(selStart, selEnd); } catch (e) {}
+      }
+    }
+  }
+}
+
 function renderOrder() {
   if (!userCanSee('inventory_read')) {
     document.getElementById('view-order').innerHTML = `<div class="empty">${t('permissions')} — needs <code>inventory_read</code></div>`;
@@ -2578,7 +2601,7 @@ function renderOrder() {
     <p class="lead">Walking the floor with a customer? Tap a SKU to add it. When they're ready, hit Checkout — same payment + signature + print flow as any other sale.</p>
 
     <div class="field">
-      <input class="input" placeholder="Search by name, SKU, or category..." value="${ORDER_CART.search}" oninput="ORDER_CART.search=this.value; renderOrder();" style="font-size:16px; padding:14px 16px;" autofocus>
+      <input class="input" id="order-search-input" placeholder="Search by name, SKU, or category..." value="${ORDER_CART.search}" oninput="ORDER_CART.search=this.value; preserveFocusRerender(renderOrder);" style="font-size:16px; padding:14px 16px;" autofocus>
     </div>
 
     <div class="scroll-x" style="margin-bottom:14px;">
@@ -2820,7 +2843,7 @@ function renderNewInvoice() {
 
     <div class="field">
       <label class="field-lbl">Search SKU · tap to add</label>
-      <input class="input" placeholder="Search by name, SKU, or category..." value="${NEW_INV.search}" oninput="NEW_INV.search=this.value; renderNewInvoice();" autofocus>
+      <input class="input" id="newinv-search-input" placeholder="Search by name, SKU, or category..." value="${NEW_INV.search}" oninput="NEW_INV.search=this.value; preserveFocusRerender(renderNewInvoice);" autofocus>
     </div>
 
     <div style="display:grid; grid-template-columns:repeat(2,1fr); gap:6px; max-height:240px; overflow-y:auto; padding:4px; background:var(--surface-soft); border-radius:8px; margin-bottom:12px;">
@@ -5020,18 +5043,49 @@ const RECENT_REELS = [
   { id: 'r2', sku: 'MATT-K-PT', theme: 'memorial_day', title: 'King Pillow-Top · Memorial Day 25% off', when: '6 days ago', views: 12300, leads: 38, plat: ['fb','ig','tt'] },
   { id: 'r3', sku: 'BED-0427', theme: 'new_arrival', title: 'Just arrived · Dresser & Mirror Set', when: '11 days ago', views: 2140, leads: 5, plat: ['fb','ig'] }
 ];
-let REEL_STATE = { photos: 4, theme: 'no_credit', script: '', captions: null, uploadedImage: null, videoUrl: null, videoStage: null };
+let REEL_STATE = { photos: 4, uploadedPhotos: [], theme: 'no_credit', script: '', captions: null, uploadedImage: null, videoUrl: null, videoStage: null };
+// Real feature gap closed 2026-10-08 (per Ivan's Apple Notes + the Cockpit
+// plan's Phase 6): this used to accept exactly one photo per reel, and
+// choosing a new file silently replaced it with no way to go back -- read
+// by staff as "photo upload closes after every single photo." Now accepts
+// multiple files at once (or repeated taps) and keeps a real thumbnail
+// strip so staff can pick which uploaded photo is the active one for the
+// ad graphic, or remove one, without losing the others.
 function handleReelPhotoUpload(event) {
-  var file = event.target.files && event.target.files[0];
-  if (!file) return;
-  var reader = new FileReader();
-  reader.onload = function(e) {
-    REEL_STATE.uploadedImage = e.target.result;
-    REEL_STATE.videoUrl = null;
-    REEL_STATE.videoStage = null;
-    renderReels();
-  };
-  reader.readAsDataURL(file);
+  var files = event.target.files;
+  if (!files || !files.length) return;
+  var remaining = files.length;
+  Array.prototype.forEach.call(files, function(file) {
+    var reader = new FileReader();
+    reader.onload = function(e) {
+      REEL_STATE.uploadedPhotos.push(e.target.result);
+      REEL_STATE.uploadedImage = e.target.result;
+      remaining--;
+      if (remaining === 0) {
+        REEL_STATE.videoUrl = null;
+        REEL_STATE.videoStage = null;
+        renderReels();
+      }
+    };
+    reader.readAsDataURL(file);
+  });
+}
+function selectReelPhoto(idx) {
+  var photo = REEL_STATE.uploadedPhotos[idx];
+  if (!photo) return;
+  REEL_STATE.uploadedImage = photo;
+  REEL_STATE.videoUrl = null;
+  REEL_STATE.videoStage = null;
+  renderReels();
+}
+function removeReelPhoto(idx, ev) {
+  if (ev) ev.stopPropagation();
+  var wasActive = REEL_STATE.uploadedPhotos[idx] === REEL_STATE.uploadedImage;
+  REEL_STATE.uploadedPhotos.splice(idx, 1);
+  if (wasActive) {
+    REEL_STATE.uploadedImage = REEL_STATE.uploadedPhotos.length ? REEL_STATE.uploadedPhotos[REEL_STATE.uploadedPhotos.length - 1] : null;
+  }
+  renderReels();
 }
 function renderReels() {
   // Real bug fixed 2026-09-21, reported live in front of the client:
@@ -5061,16 +5115,27 @@ function renderReels() {
         <div class="card">
           <h2 style="margin-top:0;">${t('reels_step_photos')}</h2>
           <div style="border: 1.5px dashed var(--border); border-radius: 10px; padding: 28px 14px; text-align:center; background: var(--surface-soft); cursor:pointer;" onclick="document.getElementById('reel-photo-input').click()">
-            <input type="file" id="reel-photo-input" accept="image/*" style="display:none;" onchange="handleReelPhotoUpload(event)">
+            <input type="file" id="reel-photo-input" accept="image/*" multiple style="display:none;" onchange="handleReelPhotoUpload(event)">
             ${REEL_STATE.uploadedImage ? `
               <img src="${REEL_STATE.uploadedImage}" style="max-width:100%; max-height:180px; border-radius:8px; object-fit:cover;">
-              <div style="font-size:12px; color:var(--dim); margin-top:10px;">Tap to replace photo</div>
+              <div style="font-size:12px; color:var(--dim); margin-top:10px;">Tap to add more photos</div>
             ` : `
               <div style="font-family:var(--serif); font-size:34px; color:var(--primary); margin-bottom:6px;">+</div>
               <div style="font-size:13px; color:var(--dim); margin-bottom:10px;">${t('reels_upload_hint')}</div>
-              <div style="font-size:11px; color:var(--dim); font-family:var(--mono); margin-top:10px;">Tap to choose a real photo from this device</div>
+              <div style="font-size:11px; color:var(--dim); font-family:var(--mono); margin-top:10px;">Tap to choose one or more real photos from this device</div>
             `}
           </div>
+          ${REEL_STATE.uploadedPhotos.length > 1 ? `
+          <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:10px;">
+            ${REEL_STATE.uploadedPhotos.map((p, idx) => `
+              <div onclick="selectReelPhoto(${idx})" style="position:relative; cursor:pointer; border-radius:6px; overflow:hidden; border:2px solid ${p === REEL_STATE.uploadedImage ? 'var(--primary)' : 'transparent'};">
+                <img src="${p}" style="width:56px; height:56px; object-fit:cover; display:block;">
+                <button onclick="removeReelPhoto(${idx}, event)" style="position:absolute; top:-4px; right:-4px; width:18px; height:18px; border-radius:50%; background:var(--danger); color:white; border:none; font-size:12px; line-height:1; cursor:pointer;">&times;</button>
+              </div>
+            `).join('')}
+          </div>
+          <div style="font-size:11px; color:var(--dim); margin-top:6px;">${REEL_STATE.uploadedPhotos.length} photos uploaded — tap one to make it the active graphic.</div>
+          ` : ''}
         </div>
 
         <div class="card">
